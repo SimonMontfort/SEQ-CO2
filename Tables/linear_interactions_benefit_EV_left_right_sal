@@ -1,0 +1,95 @@
+
+\begin{center}
+\begin{tiny}
+\begin{longtable}{l@{} c@{} c@{}}
+\hline
+ & Model 1 & Model 2 \\
+\hline
+\endfirsthead
+\hline
+ & Model 1 & Model 2 \\
+\hline
+\endhead
+\hline
+\endfoot
+\hline
+\multicolumn{3}{l}{\tiny{$^{***}p<0.001$; $^{**}p<0.01$; $^{*}p<0.05$; $^{\cdot}p<0.1$}}\\
+\caption{Ordinary least squares model with interaction effects using the choice outcome. Conjoint attributes are operationalised as continuous variables. Normalisation: continuous variables are normalised by two times
+               the standard error to make them comparable to the estimates of binary variables following Gelman (2007)}
+\label{table:linear_interactions_benefit_EV_left_right_sal}
+\endlastfoot \\
+Intercept                                                                & $3.664^{***}$    & $3.572^{***}$    \\
+                                                                         & $(0.101)$        & $(0.088)$        \\
+Experimental                                                             &                  &                  \\
+                                                                         &                  &                  \\
+\quad Reduction Target                                                   & $0.008$          & $0.008$          \\
+                                                                         & $(0.010)$        & $(0.010)$        \\
+\quad Tax Road Transport                                                 & $-0.079^{***}$   & $-0.078^{***}$   \\
+                                                                         & $(0.010)$        & $(0.010)$        \\
+\quad Tax Housing                                                        & $-0.021^{*}$     & $-0.018^{\cdot}$ \\
+                                                                         & $(0.010)$        & $(0.010)$        \\
+\quad Tax Food                                                           & $-0.073^{***}$   & $-0.073^{***}$   \\
+                                                                         & $(0.010)$        & $(0.010)$        \\
+\quad Tax Aviation Transport                                             & $-0.018^{\cdot}$ & $-0.018^{\cdot}$ \\
+                                                                         & $(0.010)$        & $(0.010)$        \\
+\quad Revenue Use                                                        & $0.012$          & $0.011$          \\
+                                                                         & $(0.010)$        & $(0.010)$        \\
+Explanatory Variables                                                    &                  &                  \\
+                                                                         &                  &                  \\
+\quad Perceived Prior Benefit                                            & $-0.175^{***}$   & $-0.181^{***}$   \\
+                                                                         & $(0.027)$        & $(0.028)$        \\
+\quad EV Charging Stations                                               &                  & $-0.004$         \\
+                                                                         &                  & $(0.039)$        \\
+Controls                                                                 &                  &                  \\
+                                                                         &                  &                  \\
+\quad Driver                                                             & $0.070^{**}$     & $0.108^{***}$    \\
+                                                                         & $(0.023)$        & $(0.023)$        \\
+\quad Home Owner                                                         & $-0.074^{***}$   & $-0.083^{***}$   \\
+                                                                         & $(0.008)$        & $(0.008)$        \\
+\quad Age                                                                & $-0.206^{***}$   & $-0.191^{***}$   \\
+                                                                         & $(0.056)$        & $(0.057)$        \\
+\quad Education                                                          & $-0.072^{*}$     & $-0.071^{*}$     \\
+                                                                         & $(0.034)$        & $(0.034)$        \\
+\quad French                                                             & $-0.184^{**}$    & $-0.089$         \\
+                                                                         & $(0.069)$        & $(0.070)$        \\
+\quad Primary Employment Sector                                          & $-0.059^{\cdot}$ & $-0.057^{\cdot}$ \\
+                                                                         & $(0.031)$        & $(0.031)$        \\
+\quad Secondary Employment Sector                                        & $-0.073^{**}$    & $-0.069^{**}$    \\
+                                                                         & $(0.025)$        & $(0.025)$        \\
+\quad Tertiary Employment Sector                                         & $0.383^{***}$    & $0.420^{***}$    \\
+                                                                         & $(0.036)$        & $(0.036)$        \\
+\quad Financial Condition                                                & $-0.092^{***}$   & $-0.038^{***}$   \\
+                                                                         & $(0.008)$        & $(0.005)$        \\
+\quad Left-Right                                                         & $-0.023$         &                  \\
+                                                                         & $(0.036)$        &                  \\
+\quad Salience: Globalisation                                            & $0.520^{***}$    & $0.509^{***}$    \\
+                                                                         & $(0.047)$        & $(0.026)$        \\
+\quad Salience: Environment and Climate                                  & $0.101^{**}$     & $0.098^{**}$     \\
+                                                                         & $(0.032)$        & $(0.032)$        \\
+\quad Intermediate Area                                                  & $-0.171^{***}$   & $-0.179^{***}$   \\
+                                                                         & $(0.028)$        & $(0.029)$        \\
+\quad Rural Area                                                         & $-0.159^{***}$   & $-0.189^{***}$   \\
+                                                                         & $(0.032)$        & $(0.034)$        \\
+Prior Benefit Interactions                                               &                  &                  \\
+                                                                         &                  &                  \\
+\quad Percieved Prior Benefit $\times$ Left-Right                        & $0.032^{***}$    &                  \\
+                                                                         & $(0.005)$        &                  \\
+\quad Percieved Prior Benefit $\times$ Salience: Environment and Climate & $-0.053^{*}$     &                  \\
+                                                                         & $(0.026)$        &                  \\
+EV Charging Stations Interactions                                        &                  &                  \\
+                                                                         &                  &                  \\
+\quad EV Charging Stations $\times$ Left-Right                           &                  & $0.000$          \\
+                                                                         &                  & $(0.005)$        \\
+\quad EV Charging Stations $\times$ Salience: Environment and Climate    &                  & $-0.049^{\cdot}$ \\
+                                                                         &                  & $(0.027)$        \\
+\hline
+Region Controls                                                          & Yes              & Yes              \\
+Observations                                                             & 12088            & 12088            \\
+R$^2$                                                                    & $0.128$          & $0.113$          \\
+Adj. R$^2$                                                               & $0.126$          & $0.110$          \\
+R$^2$                                                                    & $0.128$          & $0.113$          \\
+Adj. R$^2$                                                               & $0.126$          & $0.110$          \\
+Num. obs.                                                                & $12088$          & $12088$          \\
+\end{longtable}
+\end{tiny}
+\end{center}

@@ -1,0 +1,80 @@
+
+\begin{center}
+\begin{tiny}
+\begin{longtable}{l@{} c@{} c@{} c@{} c@{} c@{}}
+\hline
+ & Model 1 & Model 2 & Model 3 & Model 4 & Model 5 \\
+\hline
+\endfirsthead
+\hline
+ & Model 1 & Model 2 & Model 3 & Model 4 & Model 5 \\
+\hline
+\endhead
+\hline
+\endfoot
+\hline
+\multicolumn{6}{l}{\tiny{$^{***}p<0.001$; $^{**}p<0.01$; $^{*}p<0.05$; $^{\cdot}p<0.1$}}\\
+\caption{Ordinary least squares model with direct effects using the rate outcome. Conjoint attributes are operationalised as continuous variables. Normalisation: continuous variables are normalised by two times
+               the standard error to make them comparable to the estimates of binary variables following Gelman (2007). Standard errors are cluster robust by respondent id.}
+\label{table:linear_direct_exp_continuous}
+\endlastfoot \\
+Intercept                               & $3.264^{***}$  & $2.939^{***}$    & $3.180^{***}$  & $3.381^{***}$    & $3.583^{***}$    \\
+                                        & $(0.056)$      & $(0.060)$        & $(0.057)$      & $(0.085)$        & $(0.086)$        \\
+Experimental                            &                &                  &                &                  &                  \\
+                                        &                &                  &                &                  &                  \\
+\quad Reduction Target                  & $0.006$        & $0.007$          & $0.005$        & $0.009$          & $0.008$          \\
+                                        & $(0.010)$      & $(0.010)$        & $(0.010)$      & $(0.010)$        & $(0.010)$        \\
+\quad Tax Road Transport                & $-0.078^{***}$ & $-0.078^{***}$   & $-0.078^{***}$ & $-0.078^{***}$   & $-0.078^{***}$   \\
+                                        & $(0.010)$      & $(0.010)$        & $(0.010)$      & $(0.010)$        & $(0.010)$        \\
+\quad Tax Housing                       & $-0.015$       & $-0.018^{\cdot}$ & $-0.015$       & $-0.019^{\cdot}$ & $-0.017^{\cdot}$ \\
+                                        & $(0.010)$      & $(0.010)$        & $(0.010)$      & $(0.010)$        & $(0.010)$        \\
+\quad Tax Food                          & $-0.071^{***}$ & $-0.070^{***}$   & $-0.072^{***}$ & $-0.073^{***}$   & $-0.073^{***}$   \\
+                                        & $(0.011)$      & $(0.010)$        & $(0.011)$      & $(0.010)$        & $(0.010)$        \\
+\quad Tax Aviation Transport            & $-0.012$       & $-0.014$         & $-0.011$       & $-0.018^{\cdot}$ & $-0.017^{\cdot}$ \\
+                                        & $(0.011)$      & $(0.010)$        & $(0.011)$      & $(0.010)$        & $(0.010)$        \\
+\quad Revenue Use                       & $0.008$        & $0.009$          & $0.009$        & $0.011$          & $0.011$          \\
+                                        & $(0.011)$      & $(0.011)$        & $(0.011)$      & $(0.010)$        & $(0.010)$        \\
+Explanatory Variables                   &                &                  &                &                  &                  \\
+                                        &                &                  &                &                  &                  \\
+\quad Percieved Prior Benefit           &                & $0.208^{***}$    &                & $0.160^{***}$    &                  \\
+                                        &                & $(0.014)$        &                & $(0.013)$        &                  \\
+\quad EV Charging Stations              &                &                  & $0.146^{***}$  &                  & $-0.022$         \\
+                                        &                &                  & $(0.023)$      &                  & $(0.027)$        \\
+Controls                                &                &                  &                &                  &                  \\
+                                        &                &                  &                &                  &                  \\
+\quad Driver                            &                &                  &                & $-0.177^{***}$   & $-0.182^{***}$   \\
+                                        &                &                  &                & $(0.027)$        & $(0.027)$        \\
+\quad Home Owner                        &                &                  &                & $0.075^{**}$     & $0.110^{***}$    \\
+                                        &                &                  &                & $(0.024)$        & $(0.024)$        \\
+\quad Age                               &                &                  &                & $-0.079^{***}$   & $-0.083^{***}$   \\
+                                        &                &                  &                & $(0.008)$        & $(0.008)$        \\
+\quad Education                         &                &                  &                & $-0.212^{***}$   & $-0.196^{***}$   \\
+                                        &                &                  &                & $(0.057)$        & $(0.057)$        \\
+\quad French                            &                &                  &                & $-0.073^{*}$     & $-0.070^{\cdot}$ \\
+                                        &                &                  &                & $(0.036)$        & $(0.036)$        \\
+\quad Primary Employment Sector         &                &                  &                & $-0.139^{\cdot}$ & $-0.091$         \\
+                                        &                &                  &                & $(0.080)$        & $(0.080)$        \\
+\quad Secondary Employment Sector       &                &                  &                & $-0.053^{\cdot}$ & $-0.057^{\cdot}$ \\
+                                        &                &                  &                & $(0.032)$        & $(0.032)$        \\
+\quad Tertiary Employment Sector        &                &                  &                & $-0.077^{**}$    & $-0.070^{**}$    \\
+                                        &                &                  &                & $(0.025)$        & $(0.025)$        \\
+\quad Financial Condition               &                &                  &                & $0.387^{***}$    & $0.419^{***}$    \\
+                                        &                &                  &                & $(0.035)$        & $(0.036)$        \\
+\quad Left-Right                        &                &                  &                & $-0.041^{***}$   & $-0.038^{***}$   \\
+                                        &                &                  &                & $(0.004)$        & $(0.004)$        \\
+\quad Salience: Globalisation           &                &                  &                & $0.109^{***}$    & $0.099^{**}$     \\
+                                        &                &                  &                & $(0.033)$        & $(0.033)$        \\
+\quad Salience: Environment and Climate &                &                  &                & $0.441^{***}$    & $0.483^{***}$    \\
+                                        &                &                  &                & $(0.021)$        & $(0.021)$        \\
+\quad Intermediate Area                 &                &                  &                & $-0.168^{***}$   & $-0.176^{***}$   \\
+                                        &                &                  &                & $(0.027)$        & $(0.030)$        \\
+\quad Rural Area                        &                &                  &                & $-0.161^{***}$   & $-0.186^{***}$   \\
+                                        &                &                  &                & $(0.032)$        & $(0.036)$        \\
+\hline
+Region Controls                         & No             & No               & No             & Yes              & Yes              \\
+Observations                            & 12088          & 12088            & 12088          & 12088            & 12088            \\
+R$^2$                                   & $0.008$        & $0.029$          & $0.012$        & $0.124$          & $0.112$          \\
+Adj. R$^2$                              & $0.008$        & $0.029$          & $0.011$        & $0.122$          & $0.110$          \\
+\end{longtable}
+\end{tiny}
+\end{center}
