@@ -1186,7 +1186,7 @@ p_revenue_choice <- res$coefficients %>%
          name = ifelse(name == "Lump sum reimbursement und investment into climate protection", "Reimbursement und climate protection", name), 
          name = ifelse(name == "Mostly investment into climate protection", "Mostly climate protection", name),
          name = ifelse(name == "Exclusively investment into climate protection", "Exclusively climate protection", name),
-         name = factor(name, levels = c("Mostly reimbursement", "Reimbursement und climate protection", "Mostly climate protection", "")),
+         name = factor(name, levels = c("Mostly reimbursement", "Reimbursement und climate protection", "Mostly climate protection", "Exclusively climate protection")),
          ci_lo = Estimate - 1.96*`Std. Error`,
          ci_hi = Estimate + 1.96*`Std. Error`) %>% 
   ggplot(., aes(x = name, y = Estimate)) +
@@ -1205,7 +1205,7 @@ p_revenue_choice <- res$coefficients %>%
         strip.text = element_text(size = 12),
         legend.title = element_text(size=12), 
         legend.text = element_text(size=12),
-        axis.text.x = element_blank(angle = 45, hjust = 1))
+        axis.text.x = element_text(angle = 45, hjust = 1))
 p_revenue_choice
 ggsave(p_revenue_choice, filename = "Plots/p_revenue_choice.pdf", height = 5, width = 10)
 
@@ -1421,6 +1421,51 @@ texreg::texreg(list(model1.1, model1.2), digits = 3, stars = c(0.001, 0.01, 0.05
                caption = "Survey-weighted generalised linear model with interaction effects using the choice outcome. Conjoint attributes are operationalised as ordered factor levels. Normalisation: continous variables are normalised by two times 
                the standard error to make them comparable to the estimates of binary variables following Gelman (2007)"
 )
+
+##### interactions covariates
+model1.1 <- svyglm(rate ~ 
+                     attrib1_lab + attrib2_lab +  attrib3_lab +  attrib4_lab + attrib5_lab + attrib6_lab +
+                     + prior_benefit_2*as.factor(left_right) + prior_benefit_2*sal_env + driver + home_owner + age + educ + language + empl_sect + fin_cond + left_right  + sal_glob + sal_env + region 
+                   + urban_rural
+                   , data = reg_dat, weights = weight, design = design)
+model1.2 <- svyglm(rate ~ 
+                     attrib1_lab + attrib2_lab +  attrib3_lab +  attrib4_lab + attrib5_lab + attrib6_lab +
+                     + sqrt(ratio_ev_to_muni_area)*left_right + sqrt(ratio_ev_to_muni_area)*sal_env + driver + home_owner + age + educ + language + empl_sect + fin_cond + left_right  + sal_glob + sal_env + region 
+                   + urban_rural
+                   , data = reg_dat, weights = weight, design = design)
+
+x_lab <- "Tax: Road Transport"
+labs_legend <- c("no influence at all", "strong influence")
+vals_legend <- c("red4", "darkgreen")
+legend_title <- "Perceived Prior Benefit"
+x_ticks <- c("No Tax", "0.14 Fr./l petrol", "0.28 Fr./l petrol", "0.42 Fr./l petrol", "0.56 Fr./l petrol")
+p_prior_left_right <- emmeans(model1.1, "left_right", by = "prior_benefit_2",  cov.keep = c("prior_benefit_2", "left_right")) %>% 
+  as.data.frame(.) %>% 
+  filter(prior_benefit_2 %in% c(head(prior_benefit_2, n = 1), tail(prior_benefit_2, n = 1))) %>% 
+  mutate(prior_benefit_2 = as.character(prior_benefit_2),
+         attrib2_lab = factor(attrib2_lab, levels = sort(unique(attrib2_lab)))) %>% 
+  ggplot(., aes(x = attrib2_lab, y = emmean, group = prior_benefit_2, col = prior_benefit_2)) +
+  geom_line() +
+  geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL, col = prior_benefit_2), width = .1, position = position_dodge(.1)) +
+  scale_x_discrete(labels = x_ticks) +
+  scale_color_manual(legend_title, values=vals_legend, labels = labs_legend) + 
+  scale_fill_manual(legend_title, values=vals_legend, labels = labs_legend) + 
+  guides(col = guide_legend(nrow = 2)) +
+  labs(
+    title = "Interaction of Perceived Prior Benefit with Tax on Road Transport",
+    x = x_lab,
+    y = "Policy Support"
+  ) + 
+  ylim(.3, .7) +
+  theme_light() +
+  theme(legend.position = "bottom",
+        axis.text = element_text(size = 12),
+        axis.title = element_text(size = 12),
+        strip.text = element_text(size = 12),
+        legend.title = element_text(size=12), 
+        legend.text = element_text(size=12),
+        axis.text.x = element_text(angle = 45, hjust = 1))
+p_prior_left_right
 
 #----------------------------------------------------#
 # operationalisation: expvars as continuous
