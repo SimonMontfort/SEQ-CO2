@@ -40,6 +40,9 @@ library(readr)
 library(sandwich)
 library(sparsereg)
 library(tibble)
+library(ggpubr)
+library(emmeans)
+emm_options(rg.limit = 5.67e+15)
 
 setwd("/Users/simon/Documents/repo/SEQ-CO2")
 # load data
@@ -612,11 +615,11 @@ dat$attrib6_lab <- factor(dat$attrib6_lab, levels = c("Exclusively lump sum reim
 
 # (1) benefits
 dat$prior_benefit[dat$QID565 %in% c("Stark beeinflusst", "Etwas beeinflusst")] <- 1
-dat$prior_benefit[dat$QID565 %in% c("Weiss nicht / keine Antwort", "Eher nicht beeinflusst", "Überhaupt nicht beeinflusst")] <- 0
+dat$prior_benefit[dat$QID565 %in% c("Eher nicht beeinflusst", "Überhaupt nicht beeinflusst")] <- 0
 
 dat$prior_benefit_2[dat$QID565 %in% c("Stark beeinflusst")] <- 5
 dat$prior_benefit_2[dat$QID565 %in% c("Etwas beeinflusst")] <- 4
-dat$prior_benefit_2[dat$QID565 %in% c("Weiss nicht / keine Antwort")] <- 3
+dat$prior_benefit_2[dat$QID565 %in% c("Weiss nicht / keine Antwort")] <- NA
 dat$prior_benefit_2[dat$QID565 %in% c("Eher nicht beeinflusst")] <- 2
 dat$prior_benefit_2[dat$QID565 %in% c("Überhaupt nicht beeinflusst")] <- 1
 
@@ -866,7 +869,7 @@ p_desc <- dat_desc %>%
                                                 "Intermediate Area",
                                                 "Rural Area"))) %>% 
   group_by(Question, Response) %>% 
-  count() %>% 
+  count(name = "freq") %>% 
   mutate(Response = factor(Response, levels = as.character(c(0:14, NA)))) %>% 
   ggplot(aes(x = Response, y = freq)) +
   geom_col() + labs(x = "", y = "") +
@@ -878,7 +881,7 @@ p_desc <- dat_desc %>%
                                               "fin_cond" = "Financial Condition",
                                               "home_owner" = "Home Owner",
                                               "left_right" = "Left−Right",
-                                              "prior_benefit_2" = "Percieved Prior Benefit",
+                                              "prior_benefit_2" = "Perceived Prior Benefit",
                                               "rate" = "Support \n(Rate Outcome)",
                                               "choice" = "Support \n(Choice Outcome)",
                                               "ratio_ev_to_muni_area" = "EV Charging Stations",
@@ -900,7 +903,7 @@ p_desc
 ggsave(p_desc, filename = "Plots/p_desc.pdf", height = 16, width = 10)
 
 
-labs_desc <- c("Support (Rate Outcome)", "Support (Choice Outcome)", "Percieved Prior Benefit",
+labs_desc <- c("Support (Rate Outcome)", "Support (Choice Outcome)", "Perceived Prior Benefit",
                "EV Charging Stations",  "Driver", "Home Owner", "Age", "Education", "French",
                "Employment Sector", "Financial Condition", "Left-Right", "Salience: Globalisation", "Salience: Environment and Climate",
                "Region: Geneva", "Region: Middle Land", "Region: North East", "Region: Zurich", "Region: East", "Region: Central", "Region: Ticino", "Urban Area", "Intermediate Area", "Rural Area")
@@ -1076,23 +1079,24 @@ reg_dat <- dat2 %>%
   dplyr::select(outcomes, expvars, covars, weight, id) %>%
   mutate_at(vars(covars), as.character) %>% 
   mutate_at(vars(outcomes, covars, weight), as.numeric) %>% 
+  mutate(ratio_ev_to_muni_area = sqrt(ratio_ev_to_muni_area)) %>% 
   mutate_at(vars(empl_sect, urban_rural, region), as.factor)
 
 # test if weighting is necessary
 model1.7 <- lm(rate ~  attrib1_lab + attrib2_lab +  attrib3_lab +  attrib4_lab + attrib5_lab + attrib6_lab + 
                  + prior_benefit_2 + driver + home_owner + age + educ + language + empl_sect + fin_cond + left_right  + sal_glob + sal_env + region 
                + urban_rural, data = reg_dat)
-weights_tests(model = model1.7, data = reg_dat, weights = weight, sims = 10000) # they are: p-value of near 0
+# weights_tests(model = model1.7, data = reg_dat, weights = weight, sims = 10000) # they are: p-value of near 0
 
 ## A note on variable transformation, see Gelmann 2007 http://www.stat.columbia.edu/~gelman/research/unpublished/standardizing.pdf
-# to compare continuous variables' effect sizes between each other --> demean and standardise by one standard error 
+# to compare continuous variables' effect sizes between each other --> demean and standardize by one standard error 
 # to compare continuous to binary variables' effect sizes: divide by two times the standard error
 vars_to_transform <- c("prior_benefit_2", "ratio_ev_to_muni_area", "left_right", "age", "educ", "fin_cond")
-sdFunc <- function(x){(x)/2*sd(x, na.rm = T)} # binary : CHECK AGAIN
+sdFunc <- function(x){(x)/(2*sd(x, na.rm = T))} 
 reg_dat[vars_to_transform] <- lapply(reg_dat[vars_to_transform], sdFunc)
 
 design <- svydesign(~id, data = reg_dat, weights = reg_dat$weight)
-## (3) linear regression
+## (1) GLM direct effects
 model1.1 <- svyglm(rate ~ attrib1_lab + attrib2_lab +  attrib3_lab +  attrib4_lab + attrib5_lab + attrib6_lab, 
                    data = reg_dat, weights = weight, design = design)
 model1.2 <- svyglm(rate ~ attrib1_lab + attrib2_lab +  attrib3_lab +  attrib4_lab + attrib5_lab + attrib6_lab 
@@ -1117,7 +1121,7 @@ texreg::texreg(list(model1.1, model1.2, model1.3, model1.4, model1.5), digits = 
                                      "10 Fr. for short- and 30 Fr. for long-distance", "25 Fr. for short- and 75 Fr. for long-distance", "40 Fr. for short- and 120 Fr. for long-distance", "55 Fr. for short- and 165 Fr. for long-distance",
                                      "Mostly reimbursement", "Reimbursement und climate protection", "Mostly climate protection", "Exclusively climate protection",
                                      # EVs
-                                     "Percieved Prior Benefit", "EV Charging Stations", 
+                                     "Perceived Prior Benefit", "EV Charging Stations", 
                                      # CTRLs
                                      "Driver", "Home Owner", "Age", "Education", "French", "Primary Employment Sector", "Secondary Employment Sector", "Tertiary Employment Sector", "Financial Condition", "Left-Right",
                                      "Salience: Globalisation", "Salience: Environment and Climate",
@@ -1133,13 +1137,54 @@ texreg::texreg(list(model1.1, model1.2, model1.3, model1.4, model1.5), digits = 
                ),
                include.deviance = F,
                label = "table:weighted_direct_exp_factor",
-               file = "Tables/weighted_direct_exp_factor.tex",
+               # file = "Tables/weighted_direct_exp_factor.tex",
                use.packages = F, 
-               caption = "Survey-weighted generalised linear model with direct effects using the rate outcome. Conjoint attributes are operationalised as ordered factor levels. Normalisation: continous variables are normalised by two times 
+               caption = "Survey-weighted generalised linear model with direct effects using the rate outcome. Conjoint attributes are 
+               operationalised as ordered factor levels. Normalisation: continous variables are normalised by two times 
                the standard error to make them comparable to the estimates of binary variables following Gelman (2007)")
 
+# Plot direct effects
+res <- as.data.frame(summary(model1.4)$coefficients) 
+res <- summary(model1.4)$coefficients
+res <- rbind(res, summary(model1.5)$coefficients)
 
+p_direct <- res %>% 
+  as.data.frame() %>% 
+  mutate(ci_lo = Estimate - 1.96*`Std. Error`,
+         ci_hi = Estimate + 1.96*`Std. Error`) %>% 
+  dplyr::filter(grepl("prior_benefit_2", rownames(res)) |
+                grepl("sqrt.ratio_ev_to_muni_area.", rownames(res))) %>% 
+  rownames_to_column("name") %>% 
+  mutate(name = ifelse(name == "prior_benefit_2", "Perceived Prior Benefit", name),
+         name = ifelse(name == "sqrt.ratio_ev_to_muni_area.", "EV Charging Stations", name),
+         # name = ifelse(name == "Lump sum reimbursement und investment into climate protection", "Reimbursement und climate protection", name), 
+         # name = ifelse(name == "Mostly investment into climate protection", "Mostly climate protection", name),
+         # name = ifelse(name == "Exclusively investment into climate protection", "Exclusively climate protection", name),
+         # name = factor(name, levels = c("Mostly reimbursement", "Reimbursement und climate protection", "Mostly climate protection", "Exclusively climate protection")),
+         ci_lo = Estimate - 1.96*`Std. Error`,
+         ci_hi = Estimate + 1.96*`Std. Error`) %>% 
+  ggplot(., aes(y = Estimate, x = name)) +
+  geom_pointrange(aes(ymin = ci_lo, ymax = ci_hi)) +
+  coord_flip() +
+  labs(
+    # title = "Direct Main Effects",
+    x = "",
+    y = "Estimate",
+    # subtitle = "Baseline: Exclusively Reimbursement"
+  ) +
+  geom_hline(yintercept = 0, linetype = 'dashed', col = 'red') +
+  theme_light() +
+  theme(axis.text = element_text(size = 12),
+        axis.title = element_text(size = 12),
+        strip.text = element_text(size = 12),
+        legend.title = element_text(size=12), 
+        legend.text = element_text(size=12),
+        axis.text.x = element_text(angle = 0, hjust = 1))
 
+p_direct
+ggsave(p_direct, filename = "Plots/p_direct.pdf", height = 5, width = 10)
+
+# plot revenue recycling
 res <- summary(model1.1)
 p_revenue_rate <- res$coefficients %>% 
   as.data.frame() %>% 
@@ -1173,10 +1218,8 @@ p_revenue_rate <- res$coefficients %>%
 p_revenue_rate
 ggsave(p_revenue_rate, filename = "Plots/p_revenue_rate.pdf", height = 5, width = 10)
 
-model1.1 <- svyglm(choice ~ attrib1_lab + attrib2_lab +  attrib3_lab +  attrib4_lab + attrib5_lab + attrib6_lab, 
-                   data = reg_dat, weights = weight, design = design)
-
-res <- summary(model1.1)
+res <- summary(svyglm(choice ~ attrib1_lab + attrib2_lab +  attrib3_lab +  attrib4_lab + attrib5_lab + attrib6_lab, 
+                       data = reg_dat, weights = weight, design = design))
 p_revenue_choice <- res$coefficients %>% 
   as.data.frame() %>% 
   dplyr::filter(grepl("attrib6_lab", rownames(res$coefficients))) %>% 
@@ -1215,13 +1258,13 @@ ggsave(p_revenue_arranged, filename = "Plots/p_revenue_arranged.pdf", height = 5
 
 ##### interactions rate
 model1.1 <- svyglm(rate ~ 
-                     attrib1_lab*prior_benefit_2 + attrib2_lab*prior_benefit_2 +  attrib3_lab*prior_benefit_2 +  attrib4_lab*prior_benefit_2 + attrib5_lab*prior_benefit_2 + attrib6_lab*prior_benefit_2 +
+                     attrib1_lab*prior_benefit_2 + attrib2_lab*prior_benefit_2 + attrib3_lab*prior_benefit_2 +  attrib4_lab*prior_benefit_2 + attrib5_lab*prior_benefit_2 + attrib6_lab*prior_benefit_2 +
                      + prior_benefit_2 + driver + home_owner + age + educ + language + empl_sect + fin_cond + left_right  + sal_glob + sal_env + region 
                    + urban_rural
                    , data = reg_dat, weights = weight, design = design)
 model1.2 <- svyglm(rate ~ 
-                     attrib1_lab*sqrt(ratio_ev_to_muni_area) + attrib2_lab*sqrt(ratio_ev_to_muni_area) +  attrib3_lab*sqrt(ratio_ev_to_muni_area) +  attrib4_lab*sqrt(ratio_ev_to_muni_area) + attrib5_lab*sqrt(ratio_ev_to_muni_area) + attrib6_lab*sqrt(ratio_ev_to_muni_area) +
-                     sqrt(ratio_ev_to_muni_area) + driver + home_owner + age + educ + language + empl_sect + fin_cond + left_right  + sal_glob + sal_env + region 
+                     attrib1_lab*ratio_ev_to_muni_area + attrib2_lab*ratio_ev_to_muni_area +  attrib3_lab*ratio_ev_to_muni_area +  attrib4_lab*ratio_ev_to_muni_area + attrib5_lab*ratio_ev_to_muni_area + attrib6_lab*ratio_ev_to_muni_area +
+                     ratio_ev_to_muni_area + driver + home_owner + age + educ + language + empl_sect + fin_cond + left_right  + sal_glob + sal_env + region 
                    + urban_rural
                    , data = reg_dat, weights = weight, design = design)
 texreg::texreg(list(model1.1, model1.2), digits = 3, stars = c(0.001, 0.01, 0.05, 0.1),
@@ -1230,7 +1273,7 @@ texreg::texreg(list(model1.1, model1.2), digits = 3, stars = c(0.001, 0.01, 0.05
                omit.coef = "region",
                custom.coef.names = c("Intercept",
                                      # Experimental
-                                     "50$\\%$", "60$\\%$", "70$\\%$", "80$\\%$", "Percieved Prior Benefit",
+                                     "50$\\%$", "60$\\%$", "70$\\%$", "80$\\%$", "Perceived Prior Benefit",
                                      "0.14 Fr./l petrol", "0.28 Fr./l petrol", "0.42 Fr./l petrol", "0.56 Fr./l petrol",
                                      "0.16 Fr./l heating oil", "0.31 Fr./l heating oil", "0.47 Fr./l heating oil", "0.63 Fr./l heating oil",
                                      "0.77 Fr./kg meat", "1.53 Fr./kg meat", "2.30 Fr./kg meat", "3.07 Fr./kg meat",
@@ -1243,12 +1286,12 @@ texreg::texreg(list(model1.1, model1.2), digits = 3, stars = c(0.001, 0.01, 0.05
                                      "Intermediate Area", "Rural Area",
                                      
                                      # Interactions
-                                     "50\\% $\\times$ Prior Benefit", "60\\% $\\times$ Prior Benefit", "70\\% $\\times$ Prior Benefit", "80\\% $\\times$ Prior Benefit",
-                                     "0.14 Fr./l petrol $\\times$ Prior Benefit", "0.28 Fr./l petrol $\\times$ Prior Benefit", "0.42 Fr./l petrol $\\times$ Prior Benefit", "0.56 Fr./l petrol $\\times$ Prior Benefit",
-                                     "0.16 Fr./l heating oil $\\times$ Prior Benefit", "0.31 Fr./l heating oil $\\times$ Prior Benefit", "0.47 Fr./l heating oil $\\times$ Prior Benefit", "0.63 Fr./l heating oil $\\times$ Prior Benefit",
-                                     "0.77 Fr./kg meat $\\times$ Prior Benefit", "1.53 Fr./kg meat $\\times$ Prior Benefit", "2.30 Fr./kg meat $\\times$ Prior Benefit", "3.07 Fr./kg meat $\\times$ Prior Benefit",
-                                     "10 Fr. for short- and 30 Fr. for long-distance $\\times$ Prior Benefit", "25 Fr. for short- and 75 Fr. for long-distance $\\times$ Prior Benefit", "40 Fr. for short- and 120 Fr. for long-distance$\\times$ Prior Benefit", "55 Fr. for short- and 165 Fr. for long-distance$\\times$ Prior Benefit",
-                                     "Mostly reimbursement $\\times$ Prior Benefit", "Reimbursement and climate protection $\\times$ Prior Benefit", "Mostly climate protection $\\times$ Prior Benefit", "Exclusively climate protection $\\times$ Prior Benefit",
+                                     "50\\%$\\times$ Perceived Prior Benefit", "60\\%$\\times$ Perceived Prior Benefit", "70\\%$\\times$ Perceived Prior Benefit", "80\\%$\\times$ Perceived Prior Benefit",
+                                     "0.14 Fr./l petrol$\\times$ Perceived Prior Benefit", "0.28 Fr./l petrol$\\times$ Perceived Prior Benefit", "0.42 Fr./l petrol$\\times$ Perceived Prior Benefit", "0.56 Fr./l petrol$\\times$ Perceived Prior Benefit",
+                                     "0.16 Fr./l heating oil$\\times$ Perceived Prior Benefit", "0.31 Fr./l heating oil$\\times$ Perceived Prior Benefit", "0.47 Fr./l heating oil$\\times$ Perceived Prior Benefit", "0.63 Fr./l heating oil$\\times$ Perceived Prior Benefit",
+                                     "0.77 Fr./kg meat$\\times$ Perceived Prior Benefit", "1.53 Fr./kg meat$\\times$ Perceived Prior Benefit", "2.30 Fr./kg meat$\\times$ Perceived Prior Benefit", "3.07 Fr./kg meat$\\times$ Perceived Prior Benefit",
+                                     "10 Fr. for short- and 30 Fr. for long-distance$\\times$ Perceived Prior Benefit", "25 Fr. for short- and 75 Fr. for long-distance$\\times$ Perceived Prior Benefit", "40 Fr. for short- and 120 Fr. for long-distance$\\times$ Prior Benefit", "55 Fr. for short- and 165 Fr. for long-distance$\\times$ Prior Benefit",
+                                     "Mostly reimbursement$\\times$ Perceived Prior Benefit", "Reimbursement and climate protection$\\times$ Perceived Prior Benefit", "Mostly climate protection$\\times$ Perceived Prior Benefit", "Exclusively climate protection$\\times$ Perceived Prior Benefit",
                                      
                                      "EV Charging Stations",
                                      # 2
@@ -1271,87 +1314,89 @@ texreg::texreg(list(model1.1, model1.2), digits = 3, stars = c(0.001, 0.01, 0.05
                ),
                include.deviance = F,
                label = "table:weighted_interactions_exp_factor",
-               file = "Tables/weighted_interactions_exp_factor.tex",
+               # file = "Tables/weighted_interactions_exp_factor.tex",
                use.packages = F, 
-               caption = "Survey-weighted generalised linear model with interaction effects using the rate outcome. Conjoint attributes are operationalised as ordered factor levels. Normalisation: continous variables are normalised by two times 
+               caption = "Survey-weighted generalised linear model with interaction effects using the rate outcome. Conjoint attributes are 
+               operationalised as ordered factor levels. Normalisation: continous variables are normalised by two times 
                the standard error to make them comparable to the estimates of binary variables following Gelman (2007)"
 )
 
 
 
-library(emmeans)
-emm_options(rg.limit = 5.67e+15)
-x_lab <- "Tax: Road Transport"
-labs_legend <- c("no influence at all", "strong influence")
-vals_legend <- c("red4", "darkgreen")
-legend_title <- "Perceived Prior Benefit"
-x_ticks <- c("No Tax", "0.14 Fr./l petrol", "0.28 Fr./l petrol", "0.42 Fr./l petrol", "0.56 Fr./l petrol")
-means_dat <- emmeans(model1.1, "attrib2_lab", by = "prior_benefit_2",  cov.keep = c("prior_benefit_2", "attrib2_lab")) 
-p_prior_benefit_tax_road_fact <- means_dat %>% 
-  as.data.frame(.) %>% 
-  filter(prior_benefit_2 %in% c(head(prior_benefit_2, n = 1), tail(prior_benefit_2, n = 1))) %>% 
-  mutate(prior_benefit_2 = as.character(prior_benefit_2),
-         # attrib2_lab = factor(attrib2_lab, levels = sort(unique(attrib2_lab)))
-         ) %>% 
-  ggplot(., aes(x = attrib2_lab, y = emmean, group = prior_benefit_2, col = prior_benefit_2)) +
-  geom_line() +
-  geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL, col = prior_benefit_2), width = .1, position = position_dodge(.1)) +
-  scale_x_discrete(labels = x_ticks) +
-  scale_color_manual(legend_title, values=vals_legend, labels = labs_legend) + 
-  scale_fill_manual(legend_title, values=vals_legend, labels = labs_legend) + 
-  guides(col = guide_legend(nrow = 2)) +
-  labs(
-    title = "Perceived Prior Benefit",
-    x = x_lab,
-    y = "Support"
-  ) + 
-  theme_light() +
-  theme(legend.position = "bottom",
-        axis.text = element_text(size = 12),
-        axis.title = element_text(size = 12),
-        strip.text = element_text(size = 12),
-        legend.title = element_text(size=12), 
-        legend.text = element_text(size=12),
-        axis.text.x = element_text(angle = 45, hjust = 1))
-p_prior_benefit_tax_road_fact
-ggsave(p_prior_benefit_tax_road_fact, filename = "Plots/p_prior_benefit_tax_road_fact.pdf", height = 5, width = 10)
 
-emmeans(model1.2, "attrib2_lab", type = "response")
-
-x_lab <- "Tax: Road Transport"
-labs_legend <- c("0", "2")
-vals_legend <- c("red4", "darkgreen")
-legend_title <- "EV Chargin Stations"
-x_ticks <- c("No Tax", "0.14 Fr./l petrol", "0.28 Fr./l petrol", "0.42 Fr./l petrol", "0.56 Fr./l petrol")
-means_dat <- emmeans(model1.2, "attrib2_lab", by = "ratio_ev_to_muni_area", cov.keep = "attrib2_lab") 
-p_EV_tax_road_fact <- means_dat %>% 
-  as.data.frame(.) %>% 
-  # filter(ratio_ev_to_muni_area == 0 | (ratio_ev_to_muni_area > 1.99 & ratio_ev_to_muni_area < 2)) %>% 
-  mutate(ratio_ev_to_muni_area = as.character(ratio_ev_to_muni_area),
-         # attrib2_lab = factor(attrib2_lab, levels = sort(unique(attrib2_lab)))
-  ) %>% 
-  ggplot(., aes(x = attrib2_lab, y = emmean, group = ratio_ev_to_muni_area, col = ratio_ev_to_muni_area)) +
-  geom_line() +
-  geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL, col = ratio_ev_to_muni_area), width = .1, position = position_dodge(.1)) +
-  scale_x_discrete(labels = x_ticks) +
-  scale_color_manual(legend_title, values=vals_legend, labels = labs_legend) + 
-  scale_fill_manual(legend_title, values=vals_legend, labels = labs_legend) + 
-  guides(col = guide_legend(nrow = 2)) +
-  labs(
-    title = "EV Charging Stations",
-    x = x_lab,
-    y = "Support"
-  ) + 
-  theme_light() +
-  theme(legend.position = "bottom",
-        axis.text = element_text(size = 12),
-        axis.title = element_text(size = 12),
-        strip.text = element_text(size = 12),
-        legend.title = element_text(size=12), 
-        legend.text = element_text(size=12),
-        axis.text.x = element_text(angle = 45, hjust = 1))
-p_EV_tax_road_fact
-ggsave(p_EV_tax_road_fact, filename = "Plots/p_EV_tax_road_fact.pdf", height = 5, width = 10)
+# x_lab <- "Tax: Road Transport"
+# labs_legend <- c("no influence at all", "strong influence")
+# vals_legend <- c("red4", "darkgreen")
+# legend_title <- "Perceived Prior Benefit"
+# x_ticks <- c("No Tax", "0.14 Fr./l petrol", "0.28 Fr./l petrol", "0.42 Fr./l petrol", "0.56 Fr./l petrol")
+# means_dat_fact_1.1 <- emmeans(model1.1, "attrib2_lab", by = "prior_benefit_2", cov.keep = c("attrib2_lab"), at = list(prior_benefit_2 = 1))
+# means_dat_fact_1.2 <- emmeans(model1.1, "attrib2_lab", by = "prior_benefit_2", cov.keep = c("attrib2_lab"), at = list(prior_benefit_2 = 5))
+# means_dat_fact_1 <- rbind(as.data.frame(means_dat_fact_1.1) %>% mutate(prior_benefit_2 = 1), as.data.frame(means_dat_fact_1.2) %>% mutate(prior_benefit_2 = 5))
+# p_prior_benefit_tax_road_fact <- means_dat_fact_1 %>%
+#   # as.data.frame(.) %>%
+#   # filter(prior_benefit_2 %in% c(head(prior_benefit_2, n = 1), tail(prior_benefit_2, n = 1))) %>%
+#   mutate(prior_benefit_2 = as.character(prior_benefit_2)) %>%
+#   ggplot(., aes(x = attrib2_lab, y = emmean, group = prior_benefit_2, col = prior_benefit_2)) +
+#   geom_line() +
+#   geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL, col = prior_benefit_2), width = .1, position = position_dodge(.1)) +
+#   scale_x_discrete(labels = x_ticks) +
+#   scale_color_manual(legend_title, values=vals_legend, labels = labs_legend) +
+#   scale_fill_manual(legend_title, values=vals_legend, labels = labs_legend) +
+#   guides(col = guide_legend(nrow = 2)) +
+#   labs(
+#     title = "Perceived Prior Benefit",
+#     x = x_lab,
+#     y = "Support (Rate Outcome)"
+#   ) +
+#   theme_light() +
+#   theme(legend.position = "bottom",
+#         axis.text = element_text(size = 12),
+#         axis.title = element_text(size = 12),
+#         strip.text = element_text(size = 12),
+#         legend.title = element_text(size=12),
+#         legend.text = element_text(size=12),
+#         axis.text.x = element_text(angle = 45, hjust = 1))
+# p_prior_benefit_tax_road_fact
+# ggsave(p_prior_benefit_tax_road_fact, filename = "Plots/p_prior_benefit_tax_road_fact.pdf", height = 5, width = 10)
+# 
+# 
+# x_lab <- "Tax: Road Transport"
+# labs_legend <- c("0", "2")
+# vals_legend <- c("red4", "darkgreen")
+# legend_title <- "EV Chargin Stations"
+# x_ticks <- c("No Tax", "0.14 Fr./l petrol", "0.28 Fr./l petrol", "0.42 Fr./l petrol", "0.56 Fr./l petrol")
+# means_dat_fact_2.1 <- emmeans(model1.2, "attrib2_lab", by = "ratio_ev_to_muni_area", cov.keep = "attrib2_lab", at = list(ratio_ev_to_muni_area = 0))
+# means_dat_fact_2.2 <- emmeans(model1.2, "attrib2_lab", by = "ratio_ev_to_muni_area", cov.keep = "attrib2_lab", at = list(ratio_ev_to_muni_area = 2))
+# means_dat_fact_2 <- rbind(as.data.frame(means_dat_fact_2.1) %>% mutate(ratio_ev_to_muni_area = 0), as.data.frame(means_dat_fact_2.2) %>% mutate(prior_benefit_2 = 2))
+# 
+# p_EV_tax_road_fact <- means_dat_fact_2 %>%
+#   as.data.frame(.) %>%
+#   # filter(ratio_ev_to_muni_area == 0 | (ratio_ev_to_muni_area > 1.99 & ratio_ev_to_muni_area < 2)) %>%
+#   mutate(ratio_ev_to_muni_area = as.character(ratio_ev_to_muni_area),
+#          # attrib2_lab = factor(attrib2_lab, levels = sort(unique(attrib2_lab)))
+#   ) %>%
+#   ggplot(., aes(x = attrib2_lab, y = emmean, group = ratio_ev_to_muni_area, col = ratio_ev_to_muni_area)) +
+#   geom_line() +
+#   geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL, col = ratio_ev_to_muni_area), width = .1, position = position_dodge(.1)) +
+#   scale_x_discrete(labels = x_ticks) +
+#   scale_color_manual(legend_title, values=vals_legend, labels = labs_legend) +
+#   scale_fill_manual(legend_title, values=vals_legend, labels = labs_legend) +
+#   guides(col = guide_legend(nrow = 2)) +
+#   labs(
+#     title = "EV Charging Stations",
+#     x = x_lab,
+#     y = "Support (Rate Outcome)"
+#   ) +
+#   theme_light() +
+#   theme(legend.position = "bottom",
+#         axis.text = element_text(size = 12),
+#         axis.title = element_text(size = 12),
+#         strip.text = element_text(size = 12),
+#         legend.title = element_text(size=12),
+#         legend.text = element_text(size=12),
+#         axis.text.x = element_text(angle = 45, hjust = 1))
+# p_EV_tax_road_fact
+# ggsave(p_EV_tax_road_fact, filename = "Plots/p_EV_tax_road_fact.pdf", height = 5, width = 10)
 
 
 ##### interactions choice
@@ -1361,8 +1406,8 @@ model1.1 <- svyglm(choice ~
                    + urban_rural
                    , data = reg_dat, weights = weight, design = design)
 model1.2 <- svyglm(choice ~ 
-                     attrib1_lab*sqrt(ratio_ev_to_muni_area) + attrib2_lab*sqrt(ratio_ev_to_muni_area) +  attrib3_lab*sqrt(ratio_ev_to_muni_area) +  attrib4_lab*sqrt(ratio_ev_to_muni_area) + attrib5_lab*sqrt(ratio_ev_to_muni_area) + attrib6_lab*sqrt(ratio_ev_to_muni_area) +
-                     sqrt(ratio_ev_to_muni_area) + driver + home_owner + age + educ + language + empl_sect + fin_cond + left_right  + sal_glob + sal_env + region 
+                     attrib1_lab*ratio_ev_to_muni_area + attrib2_lab*ratio_ev_to_muni_area +  attrib3_lab*ratio_ev_to_muni_area +  attrib4_lab*ratio_ev_to_muni_area + attrib5_lab*ratio_ev_to_muni_area + attrib6_lab*ratio_ev_to_muni_area +
+                     ratio_ev_to_muni_area + driver + home_owner + age + educ + language + empl_sect + fin_cond + left_right  + sal_glob + sal_env + region 
                    + urban_rural
                    , data = reg_dat, weights = weight, design = design)
 
@@ -1372,7 +1417,7 @@ texreg::texreg(list(model1.1, model1.2), digits = 3, stars = c(0.001, 0.01, 0.05
                omit.coef = "region",
                custom.coef.names = c("Intercept",
                                      # Experimental
-                                     "50$\\%$", "60$\\%$", "70$\\%$", "80$\\%$", "Percieved Prior Benefit",
+                                     "50$\\%$", "60$\\%$", "70$\\%$", "80$\\%$", "Perceived Prior Benefit",
                                      "0.14 Fr./l petrol", "0.28 Fr./l petrol", "0.42 Fr./l petrol", "0.56 Fr./l petrol",
                                      "0.16 Fr./l heating oil", "0.31 Fr./l heating oil", "0.47 Fr./l heating oil", "0.63 Fr./l heating oil",
                                      "0.77 Fr./kg meat", "1.53 Fr./kg meat", "2.30 Fr./kg meat", "3.07 Fr./kg meat",
@@ -1384,16 +1429,14 @@ texreg::texreg(list(model1.1, model1.2), digits = 3, stars = c(0.001, 0.01, 0.05
                                      "Driver", "Home Owner", "Age", "Education", "French", "Primary Employment Sector", "Secondary Employment Sector", "Tertiary Employment Sector", "Financial Condition", "Left-Right",
                                      "Salience: Globalisation", "Salience: Environment and Climate",
                                      "Intermediate Area", "Rural Area",
-                                     # "Preference: Regulatory Instruments", "Preference: Voluntary Instruments", "Preference: Subsidies", "Preference: Technical Solutions",
-                                     # "Belief: Effectiveness", "Belief: Efficiency", "Belief: Competitiveness", "Belief: Justice", "Belief: Transformation"
-                                     
+
                                      # 1
-                                     "50\\% $\\times$ Prior Benefit", "60\\% $\\times$ Prior Benefit", "70\\% $\\times$ Prior Benefit", "80\\% $\\times$ Prior Benefit",
-                                     "0.14 Fr./l petrol $\\times$ Prior Benefit", "0.28 Fr./l petrol $\\times$ Prior Benefit", "0.42 Fr./l petrol $\\times$ Prior Benefit", "0.56 Fr./l petrol $\\times$ Prior Benefit",
-                                     "0.16 Fr./l heating oil $\\times$ Prior Benefit", "0.31 Fr./l heating oil $\\times$ Prior Benefit", "0.47 Fr./l heating oil $\\times$ Prior Benefit", "0.63 Fr./l heating oil $\\times$ Prior Benefit",
-                                     "0.77 Fr./kg meat $\\times$ Prior Benefit", "1.53 Fr./kg meat $\\times$ Prior Benefit", "2.30 Fr./kg meat $\\times$ Prior Benefit", "3.07 Fr./kg meat $\\times$ Prior Benefit",
-                                     "10 Fr. for short- and 30 Fr. for long-distance $\\times$ Prior Benefit", "25 Fr. for short- and 75 Fr. for long-distance $\\times$ Prior Benefit", "40 Fr. for short- and 120 Fr. for long-distance$\\times$ Prior Benefit", "55 Fr. for short- and 165 Fr. for long-distance$\\times$ Prior Benefit",
-                                     "Mostly reimbursement $\\times$ Prior Benefit", "Reimbursement and climate protection $\\times$ Prior Benefit", "Mostly climate protection $\\times$ Prior Benefit", "Exclusively climate protection $\\times$ Prior Benefit",
+                                     "50\\%$\\times$ Perceived Prior Benefit", "60\\%$\\times$ Perceived Prior Benefit", "70\\%$\\times$ Perceived Prior Benefit", "80\\%$\\times$ Perceived Prior Benefit",
+                                     "0.14 Fr./l petrol$\\times$ Perceived Prior Benefit", "0.28 Fr./l petrol$\\times$ Perceived Prior Benefit", "0.42 Fr./l petrol$\\times$ Perceived Prior Benefit", "0.56 Fr./l petrol$\\times$ Perceived Prior Benefit",
+                                     "0.16 Fr./l heating oil$\\times$ Perceived Prior Benefit", "0.31 Fr./l heating oil$\\times$ Perceived Prior Benefit", "0.47 Fr./l heating oil$\\times$ Perceived Prior Benefit", "0.63 Fr./l heating oil$\\times$ Perceived Prior Benefit",
+                                     "0.77 Fr./kg meat$\\times$ Perceived Prior Benefit", "1.53 Fr./kg meat$\\times$ Perceived Prior Benefit", "2.30 Fr./kg meat$\\times$ Perceived Prior Benefit", "3.07 Fr./kg meat$\\times$ Perceived Prior Benefit",
+                                     "10 Fr. for short- and 30 Fr. for long-distance$\\times$ Perceived Prior Benefit", "25 Fr. for short- and 75 Fr. for long-distance$\\times$ Perceived Prior Benefit", "40 Fr. for short- and 120 Fr. for long-distance$\\times$ Prior Benefit", "55 Fr. for short- and 165 Fr. for long-distance$\\times$ Prior Benefit",
+                                     "Mostly reimbursement$\\times$ Perceived Prior Benefit", "Reimbursement and climate protection$\\times$ Perceived Prior Benefit", "Mostly climate protection$\\times$ Perceived Prior Benefit", "Exclusively climate protection$\\times$ Perceived Prior Benefit",
                                      
                                      "EV Charging Stations",
                                      # 2
@@ -1416,35 +1459,190 @@ texreg::texreg(list(model1.1, model1.2), digits = 3, stars = c(0.001, 0.01, 0.05
                ),
                include.deviance = F,
                label = "table:weighted_interactions_exp_factor_choice",
-               file = "Tables/weighted_interactions_exp_factor_choice.tex",
+               # file = "Tables/weighted_interactions_exp_factor_choice.tex",
                use.packages = F, 
-               caption = "Survey-weighted generalised linear model with interaction effects using the choice outcome. Conjoint attributes are operationalised as ordered factor levels. Normalisation: continous variables are normalised by two times 
+               caption = "Survey-weighted generalised linear model with interaction effects using the choice outcome. Conjoint attributes are 
+               operationalised as ordered factor levels. Normalisation: continous variables are normalised by two times 
                the standard error to make them comparable to the estimates of binary variables following Gelman (2007)"
 )
 
+
+
 ##### interactions covariates
+reg_dat_int <- reg_dat %>% mutate(left_right = as.factor(left_right))
+design_int <- svydesign(~id, data = reg_dat_int, weights = reg_dat_int$weight)
 model1.1 <- svyglm(rate ~ 
                      attrib1_lab + attrib2_lab +  attrib3_lab +  attrib4_lab + attrib5_lab + attrib6_lab +
-                     + prior_benefit_2*as.factor(left_right) + prior_benefit_2*sal_env + driver + home_owner + age + educ + language + empl_sect + fin_cond + left_right  + sal_glob + sal_env + region 
+                     + prior_benefit_2*left_right + driver + home_owner + age + educ + language + empl_sect + fin_cond + left_right  + sal_glob + sal_env + region 
                    + urban_rural
-                   , data = reg_dat, weights = weight, design = design)
+                   , data = reg_dat_int, weights = weight, design = design_int)
 model1.2 <- svyglm(rate ~ 
                      attrib1_lab + attrib2_lab +  attrib3_lab +  attrib4_lab + attrib5_lab + attrib6_lab +
-                     + sqrt(ratio_ev_to_muni_area)*left_right + sqrt(ratio_ev_to_muni_area)*sal_env + driver + home_owner + age + educ + language + empl_sect + fin_cond + left_right  + sal_glob + sal_env + region 
+                    + prior_benefit_2*sal_env + driver + home_owner + age + educ + language + empl_sect + fin_cond + left_right  + sal_glob + sal_env + region 
+                   + urban_rural
+                   , data = reg_dat, weights = weight, design = design)
+model1.3 <- svyglm(rate ~ 
+                     attrib1_lab + attrib2_lab +  attrib3_lab +  attrib4_lab + attrib5_lab + attrib6_lab +
+                     + ratio_ev_to_muni_area*left_right + driver + home_owner + age + educ + language + empl_sect + fin_cond + left_right  + sal_glob + sal_env + region 
+                   + urban_rural
+                   , data = reg_dat_int, weights = weight, design = design_int)
+model1.4 <- svyglm(rate ~ 
+                     attrib1_lab + attrib2_lab +  attrib3_lab +  attrib4_lab + attrib5_lab + attrib6_lab +
+                     + ratio_ev_to_muni_area*sal_env + driver + home_owner + age + educ + language + empl_sect + fin_cond + left_right  + sal_glob + sal_env + region 
                    + urban_rural
                    , data = reg_dat, weights = weight, design = design)
 
-x_lab <- "Tax: Road Transport"
+texreg::texreg(list(model1.1, model1.3), digits = 3, stars = c(0.001, 0.01, 0.05, 0.1),
+               fontsize = "tiny", longtable = T, no.margin = T,
+               reorder.coef = c(1:26, 60, 37:45, 27:36, 46:59, 61:70),
+               omit.coef = "region",
+               custom.coef.names = c("Intercept",
+                                     # Experimental
+                                     "50$\\%$", "60$\\%$", "70$\\%$", "80$\\%$",
+                                     "0.14 Fr./l petrol", "0.28 Fr./l petrol", "0.42 Fr./l petrol", "0.56 Fr./l petrol",
+                                     "0.16 Fr./l heating oil", "0.31 Fr./l heating oil", "0.47 Fr./l heating oil", "0.63 Fr./l heating oil",
+                                     "0.77 Fr./kg meat", "1.53 Fr./kg meat", "2.30 Fr./kg meat", "3.07 Fr./kg meat",
+                                     "10 Fr. for short- and 30 Fr. for long-distance", "25 Fr. for short- and 75 Fr. for long-distance", "40 Fr. for short- and 120 Fr. for long-distance", "55 Fr. for short- and 165 Fr. for long-distance",
+                                     "Mostly reimbursement", "Reimbursement und climate protection", "Mostly climate protection", "Exclusively climate protection",
+
+                                     # EVs
+                                     "Perceived Prior Benefit",
+                                     # CTRLs
+                                     "Left-Right [= 1]", "Left-Right [= 2]", "Left-Right [= 3]", "Left-Right [= 4]", "Left-Right [= 5]",
+                                     "Left-Right [= 6]", "Left-Right [= 7]", "Left-Right [= 8]", "Left-Right [= 9]", "Left-Right [= 10]",
+
+                                     "Driver", "Home Owner", "Age", "Education", "French", "Primary Employment Sector", "Secondary Employment Sector", "Tertiary Employment Sector",
+                                     "Financial Condition",
+                                     "Salience: Globalisation", "Salience: Environment and Climate",
+                                     "Intermediate Area", "Rural Area",
+                                     
+
+                                     "Perceived Prior Benefit $\\times$ Left-Right [= 1]", "Perceived Prior Benefit $\\times$ Left-Right [= 2]",
+                                     "Perceived Prior Benefit $\\times$ Left-Right [= 3]", "Perceived Prior Benefit $\\times$ Left-Right [= 4]",
+                                     "Perceived Prior Benefit $\\times$ Left-Right [= 5]", "Perceived Prior Benefit $\\times$ Left-Right [= 6]",
+                                     "Perceived Prior Benefit $\\times$ Left-Right [= 7]", "Perceived Prior Benefit $\\times$ Left-Right [= 8]",
+                                     "Perceived Prior Benefit $\\times$ Left-Right [= 9]", "Perceived Prior Benefit $\\times$ Left-Right [= 10]",
+
+                                     "EV Charging Stations",
+                                     "EV Charging Stations $\\times$ Left-Right [= 1]", "EV Charging Stations $\\times$ Left-Right [= 2]",
+                                     "EV Charging Stations $\\times$ Left-Right [= 3]", "EV Charging Stations $\\times$ Left-Right [= 4]",
+                                     "EV Charging Stations $\\times$ Left-Right [= 5]", "EV Charging Stations $\\times$ Left-Right [= 6]",
+                                     "EV Charging Stations $\\times$ Left-Right [= 7]", "EV Charging Stations $\\times$ Left-Right [= 8]",
+                                     "EV Charging Stations $\\times$ Left-Right [= 9]", "EV Charging Stations $\\times$ Left-Right [= 10]"
+
+               ),
+               groups = list("Experimental: Reduction Target" = 2:5, "Experimental: Tax Road Transport" = 6:9, "Experimental: Tax Housing" = 10:13,
+                             "Experimental: Tax Food" = 14:17, "Experimental: Tax Aviation Transport" = 18:21, "Experimental: Revenue Use" = 22:25,
+                             "Explanatory Variables" = 26:27, "Controls" = 28:50,
+                             "Interactions: Prior Benefit and Left-Right" = 51:60, "Interactions: EV Stations and Left-Right" = 61:70),
+               custom.gof.rows = list("Region Controls" = c("Yes", "Yes"),
+                                      "Observations" = lapply(list(model1.1, model1.3), nobs),
+                                      "R^2" = sapply(lapply(list(model1.1, model1.3), summ), attr, "rsq"),
+                                      "Adj. R^2" = sapply(lapply(list(model1.1, model1.3), summ), attr, "arsq")
+               ),
+               include.deviance = F,
+               label = "table:weighted_interactions_left_right_exp_factor_rate",
+               # file = "Tables/weighted_interactions_left_right_exp_factor_rate.tex",
+               use.packages = F, 
+               caption = "Survey-weighted generalised linear model with interaction effects of the explanatory variables with 
+               left-right using the rate outcome. Conjoint attributes are 
+               operationalised as ordered factor levels. Normalisation: continous variables are normalised by two times 
+               the standard error to make them comparable to the estimates of binary variables following Gelman (2007)"
+)
+
+texreg::texreg(list(model1.2, model1.4), digits = 3, stars = c(0.001, 0.01, 0.05, 0.1),
+               fontsize = "tiny", longtable = T, no.margin = T,
+               reorder.coef = c(1:26, 42, 28:37, 27, 38:41, 43),
+               omit.coef = "region",
+               custom.coef.names = c("Intercept",
+                                     # Experimental
+                                     "50$\\%$", "60$\\%$", "70$\\%$", "80$\\%$",
+                                     "0.14 Fr./l petrol", "0.28 Fr./l petrol", "0.42 Fr./l petrol", "0.56 Fr./l petrol",
+                                     "0.16 Fr./l heating oil", "0.31 Fr./l heating oil", "0.47 Fr./l heating oil", "0.63 Fr./l heating oil",
+                                     "0.77 Fr./kg meat", "1.53 Fr./kg meat", "2.30 Fr./kg meat", "3.07 Fr./kg meat",
+                                     "10 Fr. for short- and 30 Fr. for long-distance", "25 Fr. for short- and 75 Fr. for long-distance", "40 Fr. for short- and 120 Fr. for long-distance", "55 Fr. for short- and 165 Fr. for long-distance",
+                                     "Mostly reimbursement", "Reimbursement und climate protection", "Mostly climate protection", "Exclusively climate protection",
+
+                                     # EVs
+                                     "Perceived Prior Benefit",
+                                     # CTRLs
+                                     "Salience: Environment and Climate",
+
+                                     "Driver", "Home Owner", "Age", "Education", "French", "Primary Employment Sector", "Secondary Employment Sector", "Tertiary Employment Sector",
+                                     "Financial Condition", "Left-Right",
+                                     "Salience: Globalisation",
+                                     "Intermediate Area", "Rural Area",
+                                     "Perceived Prior Benefit $\\times$ Salience: Environment and Climate",
+
+                                     "EV Charging Stations",
+                                     "EV Charging Stations $\\times$ Salience: Environment and Climate"
+               ),
+               groups = list("Experimental: Reduction Target" = 2:5, "Experimental: Tax Road Transport" = 6:9, "Experimental: Tax Housing" = 10:13,
+                             "Experimental: Tax Food" = 14:17, "Experimental: Tax Aviation Transport" = 18:21, "Experimental: Revenue Use" = 22:25,
+                             "Explanatory Variables" = 26:27, "Controls" = 28:41,
+                             "Interaction: Prior Benefit and Salience" = 42, "Interaction: EV Stations and Salience" = 43),
+               custom.gof.rows = list("Region Controls" = c("Yes", "Yes"),
+                                      "Observations" = lapply(list(model1.1, model1.3), nobs),
+                                      "R^2" = sapply(lapply(list(model1.1, model1.3), summ), attr, "rsq"),
+                                      "Adj. R^2" = sapply(lapply(list(model1.1, model1.3), summ), attr, "arsq")
+               ),
+               include.deviance = F,
+               label = "table:weighted_interactions_sal_env_exp_factor_rate",
+               # file = "Tables/weighted_interactions_sal_env_exp_factor_rate.tex",
+               use.packages = F, 
+               caption = "Survey-weighted generalised linear model with interaction effects of the explanatory variables with 
+               salience of environment and climate using the rate outcome. Conjoint attributes are 
+               operationalised as ordered factor levels. Normalisation: continous variables are normalised by two times 
+               the standard error to make them comparable to the estimates of binary variables following Gelman (2007)"
+)
+  
+library(sjPlot) 
+library(emmeans)
+plot_model_custom <- function(model, term1, term2, legend_title, x_lab, vals_legend, labs_legend){
+  plot_model(model, type = "emm", terms = c(term1, term2)) 
+    # labs(
+    #   title = "",
+    #   x = x_lab,
+    #   y = "Support \n(Choice Outcome)"
+    # ) + 
+    # scale_x_continuous(labels = levels(dat[, term1]), n.breaks = 5) +
+    # scale_color_manual(legend_title, values=vals_legend, labels = labs_legend) + 
+    # scale_fill_manual(legend_title, values=vals_legend, labels = labs_legend) + 
+    # guides(col=guide_legend(ncol=2)) +
+    # theme_light() +
+    # theme(legend.position = "bottom",
+    #       axis.text = element_text(size = 15),
+    #       axis.title = element_text(size = 15),
+    #       strip.text = element_text(size = 15),
+    #       legend.title = element_text(size=15), 
+    #       legend.text = element_text(size=15),
+    #       axis.text.x = element_text(angle = 45, hjust = 1))
+}
+
+p_prior_benefit_tax_road <- plot_model_custom(model1.1, "left_right", "prior_benefit_2 [1, 5]", "Percieved Prior Benefit", "Left-Right\n(0 = left, 10 = right)", c("red4", "darkgreen"), c("no influence at all", "strong influence"))
+p_EV_tax_road <- plot_model_custom(model1.3, "left_right", "ratio_ev_to_muni_area [0, 2]", "EV Stations", "Left-Right\n(0 = left, 10 = right)", c("red4", "darkgreen"), c("0", "2"))
+p_prior_benefit_tax_road <- plot_model_custom(model1.2, "sal_env", "prior_benefit_2 [1, 5]", "Percieved Prior Benefit", "Salience: Environement and Climate", c("red4", "darkgreen"), c("no influence at all", "strong influence"))
+p_EV_tax_road <- plot_model_custom(model1.4, "sal_env", "ratio_ev_to_muni_area [0, 2]", "EV Stations", "Salience: Environement and Climate", c("red4", "darkgreen"), c("0", "2"))
+
+ggsave(p_prior_benefit_tax_road, filename = "/Volumes/Transcend/Uni/doktorat/Umfrage CO2 Gesetz/PlotsCjoint2/p_prior_benefit_tax_road.pdf", height = 7, width = 10)
+ggsave(p_EV_tax_road, filename = "/Volumes/Transcend/Uni/doktorat/Umfrage CO2 Gesetz/PlotsCjoint2/p_EV_tax_road.pdf", height = 7, width = 10)
+
+# two sd above the mean: 1.72, rounded on the likert scale = 2
+sd(as.numeric(dat2$prior_benefit_2))*2
+
+x_lab <- "Left-right\n(0 = left, 10 = right)"
 labs_legend <- c("no influence at all", "strong influence")
 vals_legend <- c("red4", "darkgreen")
 legend_title <- "Perceived Prior Benefit"
-x_ticks <- c("No Tax", "0.14 Fr./l petrol", "0.28 Fr./l petrol", "0.42 Fr./l petrol", "0.56 Fr./l petrol")
-p_prior_left_right <- emmeans(model1.1, "left_right", by = "prior_benefit_2",  cov.keep = c("prior_benefit_2", "left_right")) %>% 
+x_ticks <- seq(0,10,1)
+means_dat1.1 <- emmeans(model1.1, "left_right", by = "prior_benefit_2", at = list(prior_benefit_2 = 1)) 
+means_dat1.2 <- emmeans(model1.1, "left_right", by = "prior_benefit_2", at = list(prior_benefit_2 = 3)) 
+p_prior_benefit_left_right <- means_dat1 %>% 
   as.data.frame(.) %>% 
   filter(prior_benefit_2 %in% c(head(prior_benefit_2, n = 1), tail(prior_benefit_2, n = 1))) %>% 
   mutate(prior_benefit_2 = as.character(prior_benefit_2),
-         attrib2_lab = factor(attrib2_lab, levels = sort(unique(attrib2_lab)))) %>% 
-  ggplot(., aes(x = attrib2_lab, y = emmean, group = prior_benefit_2, col = prior_benefit_2)) +
+         left_right = factor(left_right, levels = sort(unique(left_right)))) %>% 
+  ggplot(., aes(x = left_right, y = emmean, group = prior_benefit_2, col = prior_benefit_2)) +
   geom_line() +
   geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL, col = prior_benefit_2), width = .1, position = position_dodge(.1)) +
   scale_x_discrete(labels = x_ticks) +
@@ -1452,11 +1650,46 @@ p_prior_left_right <- emmeans(model1.1, "left_right", by = "prior_benefit_2",  c
   scale_fill_manual(legend_title, values=vals_legend, labels = labs_legend) + 
   guides(col = guide_legend(nrow = 2)) +
   labs(
-    title = "Interaction of Perceived Prior Benefit with Tax on Road Transport",
+    title = "Interaction of Perceived Prior Benefit with Left-Right",
     x = x_lab,
-    y = "Policy Support"
+    y = "Support (Rate Outcome)"
   ) + 
-  ylim(.3, .7) +
+  # ylim(.3, .7) +
+  theme_light() +
+  theme(legend.position = "bottom",
+        axis.text = element_text(size = 12),
+        axis.title = element_text(size = 12),
+        strip.text = element_text(size = 12),
+        legend.title = element_text(size=12), 
+        legend.text = element_text(size=12),
+        axis.text.x = element_text(angle = 0, hjust = 1))
+p_prior_benefit_left_right
+ggsave(p_prior_benefit_left_right, filename = "Plots/p_prior_benefit_left_right.pdf", height = 7, width = 10)
+
+x_lab <- "Salience: Climate and Environment"
+labs_legend <- c("no influence at all", "strong influence")
+vals_legend <- c("red4", "darkgreen")
+legend_title <- "Perceived Prior Benefit"
+x_ticks <- c("not salient", "salient")
+means_dat2 <- emmeans(model1.2, "sal_env", by = "prior_benefit_2",  cov.keep = c("prior_benefit_2", "sal_env"))
+p_prior_benefit_salience <- means_dat2 %>% 
+  as.data.frame(.) %>% 
+  filter(prior_benefit_2 %in% c(head(prior_benefit_2, n = 1), tail(prior_benefit_2, n = 1))) %>% 
+  mutate(prior_benefit_2 = as.character(prior_benefit_2),
+         sal_env = factor(sal_env, levels = sort(unique(sal_env))))
+  ggplot(., aes(x = sal_env, y = emmean, group = prior_benefit_2, col = prior_benefit_2)) +
+  geom_line() +
+  geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL, col = prior_benefit_2), width = .1, position = position_dodge(.1)) +
+  scale_x_discrete(labels = x_ticks) +
+  scale_color_manual(legend_title, values=vals_legend, labels = labs_legend) + 
+  scale_fill_manual(legend_title, values=vals_legend, labels = labs_legend) + 
+  guides(col = guide_legend(nrow = 2)) +
+  labs(
+    title = "Interaction of Perceived Prior Benefit with Salience of Climate and Environment",
+    x = x_lab,
+    y = "Support (Rate Outcome)"
+  ) + 
+  # ylim(.3, .7) +
   theme_light() +
   theme(legend.position = "bottom",
         axis.text = element_text(size = 12),
@@ -1465,8 +1698,103 @@ p_prior_left_right <- emmeans(model1.1, "left_right", by = "prior_benefit_2",  c
         legend.title = element_text(size=12), 
         legend.text = element_text(size=12),
         axis.text.x = element_text(angle = 45, hjust = 1))
-p_prior_left_right
+p_prior_benefit_salience
+ggsave(p_prior_benefit_salience, filename = "Plots/p_prior_benefit_salience.pdf", height = 7, width = 10)
 
+
+x_lab <- "Left-right\n(0 = left, 10 = right)"
+labs_legend <- c("0", "2")
+vals_legend <- c("red4", "darkgreen")
+legend_title <- "EV Charging Stations"
+x_ticks <- seq(0,10,1)
+# split calculation because it uses too much memory:
+means_dat3.1 <- emmeans(model1.3, "left_right", by = "ratio_ev_to_muni_area",  cov.keep = c("left_right"), at = list(ratio_ev_to_muni_area = 0)) 
+means_dat3.2 <- emmeans(model1.3, "left_right", by = "ratio_ev_to_muni_area",  cov.keep = c("left_right"), at = list(ratio_ev_to_muni_area = 2)) 
+# combine again
+means_dat3 <- rbind(as.data.frame(means_dat3.1) %>% mutate(ratio_ev_to_muni_area = 0), as.data.frame(means_dat3.2) %>% mutate(ratio_ev_to_muni_area = 2))
+p_ev_stations_left_right <- means_dat3 %>% 
+  mutate(ratio_ev_to_muni_area = as.character(ratio_ev_to_muni_area),
+         left_right = factor(left_right, levels = sort(unique(left_right)))) %>% 
+  ggplot(., aes(x = left_right, y = emmean, group = ratio_ev_to_muni_area, col = ratio_ev_to_muni_area)) +
+  geom_line() +
+  geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL, col = ratio_ev_to_muni_area), width = .1, position = position_dodge(.1)) +
+  scale_x_discrete(labels = x_ticks) +
+  scale_color_manual(legend_title, values=vals_legend, labels = labs_legend) + 
+  scale_fill_manual(legend_title, values=vals_legend, labels = labs_legend) + 
+  guides(col = guide_legend(nrow = 2)) +
+  labs(
+    title = "Interaction of EV Charging Stations with Left-Right",
+    x = x_lab,
+    y = "Support (Rate Outcome)"
+  ) + 
+  # ylim(.3, .7) +
+  theme_light() +
+  theme(legend.position = "bottom",
+        axis.text = element_text(size = 12),
+        axis.title = element_text(size = 12),
+        strip.text = element_text(size = 12),
+        legend.title = element_text(size=12), 
+        legend.text = element_text(size=12),
+        axis.text.x = element_text(angle = 0, hjust = 1))
+p_ev_stations_left_right
+ggsave(p_ev_stations_left_right, filename = "Plots/p_ev_stations_left_right.pdf", height = 7, width = 10)
+
+x_lab <- "Salience: Climate and Environment"
+labs_legend <- c("0", "2")
+vals_legend <- c("red4", "darkgreen")
+legend_title <- "EV Charging Stations"
+x_ticks <- c("not salient", "salient")
+means_dat4 <- emmeans(model1.4, "sal_env", by = "ratio_ev_to_muni_area",  cov.keep = c("sal_env"), at = list(ratio_ev_to_muni_area = 0)) 
+p_ev_stations_sal_env <- means_dat4 %>% 
+  as.data.frame(.) %>% 
+  filter(ratio_ev_to_muni_area == 0 | ratio_ev_to_muni_area >= 2.02 & ratio_ev_to_muni_area <= 2.04) %>% 
+  mutate(ratio_ev_to_muni_area = as.character(ratio_ev_to_muni_area),
+         sal_env = factor(sal_env, levels = sort(unique(sal_env)))) %>% 
+  ggplot(., aes(x = sal_env, y = emmean, group = ratio_ev_to_muni_area, col = ratio_ev_to_muni_area)) +
+  geom_line() +
+  geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL, col = ratio_ev_to_muni_area), width = .1, position = position_dodge(.1)) +
+  scale_x_discrete(labels = x_ticks) +
+  scale_color_manual(legend_title, values=vals_legend, labels = labs_legend) + 
+  scale_fill_manual(legend_title, values=vals_legend, labels = labs_legend) + 
+  guides(col = guide_legend(nrow = 2)) +
+  labs(
+    title = "Interaction of EV Charging Stations with Salience of Climate and Environment",
+    x = x_lab,
+    y = "Support (Rate Outcome)"
+  ) + 
+  # ylim(.3, .7) +
+  theme_light() +
+  theme(legend.position = "bottom",
+        axis.text = element_text(size = 12),
+        axis.title = element_text(size = 12),
+        strip.text = element_text(size = 12),
+        legend.title = element_text(size=12), 
+        legend.text = element_text(size=12),
+        axis.text.x = element_text(angle = 0, hjust = 1))
+p_ev_stations_sal_env
+ggsave(p_ev_stations_sal_env, filename = "Plots/p_ev_stations_sal_env.pdf", height = 7, width = 10)
+
+cov_int_left_right_arranged <- ggarange(p_prior_benefit_left_right, p_ev_stations_left_right, nrow = 2)
+cov_int_left_right_arranged
+ggsave(cov_int_left_right_arranged, filename = "Plots/cov_int_left_right_arranged.pdf", height = 7, width = 10)
+
+cov_int_salience_arranged <- ggarange(p_prior_benefit_salience, p_ev_stations_sal_env, nrow = 2)
+cov_int_salience_arranged
+ggsave(cov_int_salience_arranged, filename = "Plots/cov_int_salience_arranged.pdf", height = 7, width = 10)
+
+reg_dat2 <- reg_dat
+reg_dat2$ratio_ev_to_muni_area <- sqrt(reg_dat2$ratio_ev_to_muni_area)
+model1.4 <- svyglm(rate ~
+                     attrib1_lab + attrib2_lab*left_right*ratio_ev_to_muni_area +  attrib3_lab +  attrib4_lab + attrib5_lab + attrib6_lab +
+                     + sal_env + driver + home_owner + age + educ + language + empl_sect + fin_cond + left_right  + sal_glob + sal_env + region
+                   + urban_rural
+                   , data = reg_dat2, weights = weight, design = design)
+
+summary(model1.4)
+
+library(sjPlot)
+sjPlot::plot_model(model1.4,
+                   type = "int", terms =  c("attrib2_lab", "ratio_ev_to_muni_area [0,2.00898246766723]",  "left_right [0.422682288713068,1.9020702992088]"))[[4]] + coord_flip() + ylim(-1,7)
 #----------------------------------------------------#
 # operationalisation: expvars as continuous
 #----------------------------------------------------#
@@ -1499,7 +1827,7 @@ texreg::texreg(list(model1.1, model1.2, model1.3, model1.4, model1.5), digits = 
                omit.coef = "region",
                custom.coef.names = c("Intercept", "Reduction Target", "Tax Road Transport", "Tax Housing", "Tax Food", "Tax Aviation Transport", "Revenue Use",
                                      # EVs
-                                     "Percieved Prior Benefit", "EV Charging Stations",
+                                     "Perceived Prior Benefit", "EV Charging Stations",
                                      # CTRLs
                                      "Driver", "Home Owner", "Age", "Education", "French", "Primary Employment Sector", "Secondary Employment Sector", "Tertiary Employment Sector", "Financial Condition", "Left-Right",
                                      "Salience: Globalisation", "Salience: Environment and Climate",
@@ -1530,13 +1858,13 @@ texreg::texreg(list(model1.1, model1.2), digits = 3, stars = c(0.001, 0.01, 0.05
                fontsize = "tiny", longtable = T, no.margin = T,
                reorder.coef = c(1:2, 4:8, 3, 29, 9:19, 20:28, 30:35),
                omit.coef = "region",
-               custom.coef.names = c("Intercept", "Percieved Prior Benefit", "Reduction Target", "Tax Road Transport", "Tax Housing", "Tax Food", "Tax Aviation Transport", "Revenue Use",
+               custom.coef.names = c("Intercept", "Perceived Prior Benefit", "Reduction Target", "Tax Road Transport", "Tax Housing", "Tax Food", "Tax Aviation Transport", "Revenue Use",
                                      # CTRLs
                                      "Driver", "Home Owner", "Age", "Education", "French", "Primary Employment Sector", "Secondary Employment Sector", "Tertiary Employment Sector", "Financial Condition", "Left-Right",
                                      "Salience: Globalisation", "Salience: Environment and Climate",
                                      "Intermediate Area", "Rural Area",
                                      # Interactions
-                                     "Reduction Target $\\times$ Prior Benefit", "Road Transport $\\times$ Prior Benefit", "Housing $\\times$ Prior Benefit", "Food $\\times$ Prior Benefit", "Aviation Transport $\\times$ Prior Benefit", "Revenue Use $\\times$ Prior Benefit",
+                                     "Reduction Target $\\times$ Perceived Prior Benefit", "Road Transport $\\times$ Perceived Prior Benefit", "Housing $\\times$ Perceived Prior Benefit", "Food $\\times$ Perceived Prior Benefit", "Aviation Transport $\\times$ Perceived Prior Benefit", "Revenue Use $\\times$ Perceived Prior Benefit",
                                      "EV Charging Stations", "Reduction Target $\\times$ EV Charging Stations", "Road Transport $\\times$ EV Charging Stations", "Housing $\\times$ EV Charging Stations", "Food $\\times$ EV Charging Stations", "Aviation Transport $\\times$ EV Charging Stations", "Revenue Use $\\times$ EV Charging Stations"
                                      ),
                groups = list("Experimental" = 2:7, "Explanatory Variables" = 8:9, "Controls" = 10:21,
@@ -1568,7 +1896,7 @@ texreg::texreg(list(model1.1, model1.2), digits = 3, stars = c(0.001, 0.01, 0.05
                fontsize = "tiny", longtable = T, no.margin = T,
                reorder.coef = c(1:2, 4:8, 3, 29, 9:19, 20:28, 30:35),
                omit.coef = "region",
-               custom.coef.names = c("Intercept", "Percieved Prior Benefit", "Reduction Target", "Tax Road Transport", "Tax Housing", "Tax Food", "Tax Aviation Transport", "Revenue Use",
+               custom.coef.names = c("Intercept", "Perceived Prior Benefit", "Reduction Target", "Tax Road Transport", "Tax Housing", "Tax Food", "Tax Aviation Transport", "Revenue Use",
                                      
                                      # CTRLs
                                      "Driver", "Home Owner", "Age", "Education", "French", "Primary Employment Sector", "Secondary Employment Sector", "Tertiary Employment Sector", "Financial Condition", "Left-Right",
@@ -1578,7 +1906,7 @@ texreg::texreg(list(model1.1, model1.2), digits = 3, stars = c(0.001, 0.01, 0.05
                                      # "Belief: Effectiveness", "Belief: Efficiency", "Belief: Competitiveness", "Belief: Justice", "Belief: Transformation"
                                      
                                      # Interactions
-                                     "Reduction Target $\\times$ Prior Benefit", "Road Transport $\\times$ Prior Benefit", "Housing $\\times$ Prior Benefit", "Food $\\times$ Prior Benefit", "Aviation Transport $\\times$ Prior Benefit", "Revenue Use $\\times$ Prior Benefit",
+                                     "Reduction Target$\\times$ Perceived Prior Benefit", "Road Transport$\\times$ Perceived Prior Benefit", "Housing$\\times$ Perceived Prior Benefit", "Food$\\times$ Perceived Prior Benefit", "Aviation Transport$\\times$ Perceived Prior Benefit", "Revenue Use$\\times$ Perceived Prior Benefit",
                                      "EV Charging Stations", "Reduction Target $\\times$ EV Charging Stations", "Road Transport $\\times$ EV Charging Stations", "Housing $\\times$ EV Charging Stations", "Food $\\times$ EV Charging Stations", "Aviation Transport $\\times$ EV Charging Stations", "Revenue Use $\\times$ EV Charging Stations"
                ),
                groups = list("Experimental" = 2:7, "Explanatory Variables" = 8:9, "Controls" = 10:21,
@@ -1596,17 +1924,46 @@ texreg::texreg(list(model1.1, model1.2), digits = 3, stars = c(0.001, 0.01, 0.05
                caption = "Survey-weighted generalised linear model with interaction effects using the choice outcome. Conjoint attributes are operationalised as continuous variables. Normalisation: continuous variables are normalised by two times 
                the standard error to make them comparable to the estimates of binary variables following Gelman (2007)")
 
+library(sjPlot) 
+library(emmeans)
+plot_model_custom <- function(model, term1, term2, legend_title, x_lab, vals_legend, labs_legend){
+  plot_model(model, type = "pred", terms = c(term1, term2)) + 
+    labs(
+      title = "",
+      x = x_lab,
+      y = "Support \n(Choice Outcome)"
+    ) + 
+    scale_x_continuous(labels = levels(dat[, term1]), n.breaks = 5) +
+    scale_color_manual(legend_title, values=vals_legend, labels = labs_legend) + 
+    scale_fill_manual(legend_title, values=vals_legend, labels = labs_legend) + 
+    guides(col=guide_legend(ncol=2)) +
+    theme_light() +
+    theme(legend.position = "bottom",
+          axis.text = element_text(size = 15),
+          axis.title = element_text(size = 15),
+          strip.text = element_text(size = 15),
+          legend.title = element_text(size=15), 
+          legend.text = element_text(size=15),
+          axis.text.x = element_text(angle = 45, hjust = 1))
+}
+
+p_prior_benefit_tax_road <- plot_model_custom(model1.1, "attrib2_lab", "prior_benefit_2 [1, 4]", "Percieved Prior Benefit", "Tax: Road Transport", c("red4", "darkgreen"), c("no influence at all", "strong influence"))
+p_EV_tax_road <- plot_model_custom(model1.2, "attrib2_lab", "ratio_ev_to_muni_area [0, 2 ]", "EV Stations", "Tax: Road Transport", c("red4", "darkgreen"), c("0", "2"))
+
+ggsave(p_prior_benefit_tax_road, filename = "/Volumes/Transcend/Uni/doktorat/Umfrage CO2 Gesetz/PlotsCjoint2/p_prior_benefit_tax_road.pdf", height = 7, width = 10)
+ggsave(p_EV_tax_road, filename = "/Volumes/Transcend/Uni/doktorat/Umfrage CO2 Gesetz/PlotsCjoint2/p_EV_tax_road.pdf", height = 7, width = 10)
 
 x_lab <- "Tax: Road Transport"
 labs_legend <- c("no influence at all", "strong influence")
 vals_legend <- c("red4", "darkgreen")
 legend_title <- "Perceived Prior Benefit"
 x_ticks <- c("No Tax", "0.14 Fr./l petrol", "0.28 Fr./l petrol", "0.42 Fr./l petrol", "0.56 Fr./l petrol")
-p_prior_benefit_tax_road <- emmeans(model1.1, "attrib2_lab", by = "prior_benefit_2",  cov.keep = c("prior_benefit_2", "attrib2_lab")) %>% 
+means_dat_benefit_tax_lin <- emmeans(model1.1, "attrib2_lab", by = "prior_benefit_2", cov.keep = c("prior_benefit_2", "attrib2_lab")) %>% 
   as.data.frame(.) %>% 
   filter(prior_benefit_2 %in% c(head(prior_benefit_2, n = 1), tail(prior_benefit_2, n = 1))) %>% 
   mutate(prior_benefit_2 = as.character(prior_benefit_2),
-         attrib2_lab = factor(attrib2_lab, levels = sort(unique(attrib2_lab)))) %>% 
+         attrib2_lab = factor(attrib2_lab, levels = sort(unique(attrib2_lab))))
+p_prior_benefit_tax_road <- means_dat_benefit_tax_lin %>% 
   ggplot(., aes(x = attrib2_lab, y = emmean, group = prior_benefit_2, col = prior_benefit_2)) +
   geom_line() +
   geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL, col = prior_benefit_2), width = .1, position = position_dodge(.1)) +
@@ -1615,9 +1972,9 @@ p_prior_benefit_tax_road <- emmeans(model1.1, "attrib2_lab", by = "prior_benefit
   scale_fill_manual(legend_title, values=vals_legend, labels = labs_legend) + 
   guides(col = guide_legend(nrow = 2)) +
   labs(
-    title = "Interaction of Perceived Prior Benefit with Tax on Road Transport",
+    title = "Interaction of Perceived Prior Benefit \nwith Carbon Tax on Road Transport",
     x = x_lab,
-    y = "Policy Support"
+    y = "Support\n(Choice Outcome)"
   ) + 
   ylim(.3, .7) +
   theme_light() +
@@ -1635,11 +1992,12 @@ labs_legend <- c("0", "2")
 vals_legend <- c("red4", "darkgreen")
 legend_title <- "EV Chargin Stations"
 x_ticks <- c("No Tax", "0.14 Fr./l petrol", "0.28 Fr./l petrol", "0.42 Fr./l petrol", "0.56 Fr./l petrol")
-p_EV_tax_road <- emmeans(model1.2, "attrib2_lab", by = "ratio_ev_to_muni_area",  cov.keep = c("ratio_ev_to_muni_area", "attrib2_lab")) %>% 
+means_dat_ev_stations_tax_lin <- emmeans(model1.2, "attrib2_lab", by = "ratio_ev_to_muni_area",  cov.keep = c("ratio_ev_to_muni_area", "attrib2_lab")) %>% 
   as.data.frame(.) %>% 
-  filter(ratio_ev_to_muni_area == 0 | ratio_ev_to_muni_area >= 2.02 & ratio_ev_to_muni_area <= 2.04) %>% 
+  filter(ratio_ev_to_muni_area == 0 | ratio_ev_to_muni_area >= 1.97 & ratio_ev_to_muni_area <= 2) %>% 
   mutate(ratio_ev_to_muni_area = as.character(ratio_ev_to_muni_area),
-         attrib2_lab = factor(attrib2_lab, levels = sort(unique(attrib2_lab)))) %>% 
+         attrib2_lab = factor(attrib2_lab, levels = sort(unique(attrib2_lab))))
+p_EV_tax_road <- means_dat_ev_stations_tax_lin %>% 
   ggplot(., aes(x = attrib2_lab, y = emmean, group = ratio_ev_to_muni_area, col = ratio_ev_to_muni_area)) +
   geom_line() +
   geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL, col = ratio_ev_to_muni_area), width = .1, position = position_dodge(.1)) +
@@ -1648,9 +2006,9 @@ p_EV_tax_road <- emmeans(model1.2, "attrib2_lab", by = "ratio_ev_to_muni_area", 
   scale_fill_manual(legend_title, values=vals_legend, labels = labs_legend) + 
   guides(col = guide_legend(nrow = 2)) +
   labs(
-    title = "Interaction of EV Charging Stations with Tax on Road Transport",
+    title = "Interaction of EV Charging Stations \nwith Carbon Tax on Road Transport",
     x = x_lab,
-    y = "Policy Support"
+    y = "Support\n(Choice Outcome)"
   ) + 
   ylim(.3, .7) +
   theme_light() +
@@ -1666,62 +2024,44 @@ p_EV_tax_road <- emmeans(model1.2, "attrib2_lab", by = "ratio_ev_to_muni_area", 
 ggsave(p_prior_benefit_tax_road, filename = "Plots/p_prior_benefit_tax_road.pdf", height = 7, width = 10)
 ggsave(p_EV_tax_road, filename = "Plots/p_EV_tax_road.pdf", height = 7, width = 10)
 
-marginals_arranged <- ggarrange(p_prior_benefit_tax_road, p_EV_tax_road, nrow=1, common.legend = FALSE)
+marginals_arranged <- ggarrange(p_prior_benefit_tax_road, p_EV_tax_road, nrow = 1, common.legend = FALSE)
 marginals_arranged
-ggsave(marginals_arranged, filename = "Plots/marginals_arranged.pdf", height = 5, width = 15)
+ggsave(marginals_arranged, filename = "Plots/marginals_arranged.pdf", height = 5, width = 10)
 
-##### interactions with covariates, clean up
-model1.1 <- svyglm(rate ~ attrib1_lab + attrib2_lab +  attrib3_lab +  attrib4_lab + attrib5_lab + attrib6_lab +
-                     + prior_benefit_2 + driver + home_owner + age + educ + language + empl_sect + fin_cond + left_right*prior_benefit_2 + sal_env*prior_benefit_2 + sal_glob + sal_env + region 
+
+##### interactions covariates
+model1.1 <- svyglm(rate ~ 
+                     attrib1_lab + attrib2_lab +  attrib3_lab +  attrib4_lab + attrib5_lab + attrib6_lab +
+                     + prior_benefit_2*as.factor(left_right) + driver + home_owner + age + educ + language + empl_sect + fin_cond + left_right  + sal_glob + sal_env + region 
                    + urban_rural
                    , data = reg_dat, weights = weight, design = design)
-model1.2 <- svyglm(rate ~ attrib1_lab + attrib2_lab +  attrib3_lab +  attrib4_lab + attrib5_lab + attrib6_lab +
-                      + driver + home_owner + age + educ + language + empl_sect + fin_cond + left_right*ratio_ev_to_muni_area + sal_env*ratio_ev_to_muni_area  + sal_glob + sal_env + region 
+model1.2 <- svyglm(rate ~ 
+                     attrib1_lab + attrib2_lab +  attrib3_lab +  attrib4_lab + attrib5_lab + attrib6_lab +
+                     + prior_benefit_2*sal_env + driver + home_owner + age + educ + language + empl_sect + fin_cond + left_right  + sal_glob + sal_env + region 
+                   + urban_rural
+                   , data = reg_dat, weights = weight, design = design)
+model1.3 <- svyglm(rate ~ 
+                     attrib1_lab + attrib2_lab +  attrib3_lab +  attrib4_lab + attrib5_lab + attrib6_lab +
+                     + sqrt(ratio_ev_to_muni_area)*as.factor(left_right) + driver + home_owner + age + educ + language + empl_sect + fin_cond + left_right  + sal_glob + sal_env + region 
+                   + urban_rural
+                   , data = reg_dat, weights = weight, design = design)
+model1.4 <- svyglm(rate ~ 
+                     attrib1_lab + attrib2_lab +  attrib3_lab +  attrib4_lab + attrib5_lab + attrib6_lab +
+                     + sqrt(ratio_ev_to_muni_area)*sal_env + driver + home_owner + age + educ + language + empl_sect + fin_cond + left_right  + sal_glob + sal_env + region 
                    + urban_rural
                    , data = reg_dat, weights = weight, design = design)
 
-texreg::texreg(list(model1.1, model1.2), digits = 3, stars = c(0.001, 0.01, 0.05, 0.1),
-               fontsize = "tiny", longtable = T, no.margin = T,
-               reorder.coef = c(1:8, 25, 9:24, 26:27),
-               omit.coef = "region",
-               custom.coef.names = c("Intercept", "Reduction Target", "Tax Road Transport", "Tax Housing", "Tax Food", "Tax Aviation Transport", "Revenue Use",
-                                     "Perceived Prior Benefit",
-                                     # CTRLs
-                                     "Driver", "Home Owner", "Age", "Education", "French", "Primary Employment Sector", "Secondary Employment Sector", "Tertiary Employment Sector", "Financial Condition", "Left-Right",
-                                     "Salience: Globalisation", "Salience: Environment and Climate",
-                                     "Intermediate Area", "Rural Area",
-                                     # Interactions
-                                     "Percieved Prior Benefit $\\times$ Left-Right", "Percieved Prior Benefit $\\times$ Salience: Environment and Climate",
-                                     "EV Charging Stations",
-                                     "EV Charging Stations $\\times$ Left-Right", "EV Charging Stations $\\times$ Salience: Environment and Climate"
-                                     ),
-               groups = list("Experimental" = 2:7, "Explanatory Variables" = 8:9, "Controls" = 10:23,
-                             "Prior Benefit Interactions" = 24:25, "EV Charging Stations Interactions" = 26:27
-               ),
-               custom.gof.rows = list("Region Controls" = c("Yes", "Yes"),
-                                      "Observations" = lapply(list(model1.1, model1.2), nobs),
-                                      "R^2" = sapply(lapply(list(model1.1, model1.2), summ), attr, "rsq"),
-                                      "Adj. R^2" = sapply(lapply(list(model1.1, model1.2), summ), attr, "arsq")
-               ),
-               include.deviance = F,
-               label = "table:weighted_interactions_benefit_EV_left_right_sal",
-               file = "Tables/weighted_interactions_benefit_EV_left_right_sal.tex",
-               caption = "Survey-weighted generalised linear model with interaction effects between covariates using the rate outcome. Conjoint attributes are operationalised as continuous variables. Normalisation: continuous variables are normalised by two times
-               the standard error to make them comparable to the estimates of binary variables following Gelman (2007)"
-               )
-
-library(emmeans)
 x_lab <- "Left-right\n(0 = left, 10 = right)"
 labs_legend <- c("no influence at all", "strong influence")
 vals_legend <- c("red4", "darkgreen")
 legend_title <- "Perceived Prior Benefit"
 x_ticks <- seq(0,10,1)
-means_dat <- emmeans(model1.1, "left_right", by = "prior_benefit_2",  cov.keep = c("prior_benefit_2", "left_right"))
-p_prior_benefit_left_right <- means_dat %>% 
+means_dat1 <- emmeans(model1.1, "left_right", by = "prior_benefit_2",  cov.keep = c("prior_benefit_2", "left_right")) %>% 
   as.data.frame(.) %>% 
   filter(prior_benefit_2 %in% c(head(prior_benefit_2, n = 1), tail(prior_benefit_2, n = 1))) %>% 
   mutate(prior_benefit_2 = as.character(prior_benefit_2),
-         left_right = factor(left_right, levels = sort(unique(left_right)))) %>% 
+         left_right = factor(left_right, levels = sort(unique(left_right))))
+p_prior_benefit_left_right <- means_dat1 %>% 
   ggplot(., aes(x = left_right, y = emmean, group = prior_benefit_2, col = prior_benefit_2)) +
   geom_line() +
   geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL, col = prior_benefit_2), width = .1, position = position_dodge(.1)) +
@@ -1730,11 +2070,11 @@ p_prior_benefit_left_right <- means_dat %>%
   scale_fill_manual(legend_title, values=vals_legend, labels = labs_legend) + 
   guides(col = guide_legend(nrow = 2)) +
   labs(
-    title = "Perceived Prior Benefit and Left-Right",
+    title = "Interaction of Perceived Prior Benefit\nwith Left-Right",
     x = x_lab,
-    y = "Support"
+    y = "Support\n(Rate Outcome)"
   ) + 
-  # ylim(.3, .7) +
+  ylim(1.8, 5) +
   theme_light() +
   theme(legend.position = "bottom",
         axis.text = element_text(size = 12),
@@ -1746,18 +2086,17 @@ p_prior_benefit_left_right <- means_dat %>%
 p_prior_benefit_left_right
 ggsave(p_prior_benefit_left_right, filename = "Plots/p_prior_benefit_left_right.pdf", height = 7, width = 10)
 
-
-x_lab <- "Issue Salience\nof Environment and Climate"
+x_lab <- "Salience: Climate and Environment"
 labs_legend <- c("no influence at all", "strong influence")
 vals_legend <- c("red4", "darkgreen")
 legend_title <- "Perceived Prior Benefit"
-x_ticks <- c("not salient", "among the top\n three issues")
-means_dat <- emmeans(model1.1, "sal_env", by = "prior_benefit_2",  cov.keep = c("prior_benefit_2", "sal_env"))
-p_prior_benefit_sal_env <- means_dat %>% 
+x_ticks <- c("not salient", "salient")
+means_dat2 <- emmeans(model1.2, "sal_env", by = "prior_benefit_2",  cov.keep = c("prior_benefit_2", "sal_env")) %>% 
   as.data.frame(.) %>% 
   filter(prior_benefit_2 %in% c(head(prior_benefit_2, n = 1), tail(prior_benefit_2, n = 1))) %>% 
   mutate(prior_benefit_2 = as.character(prior_benefit_2),
-         sal_env = factor(sal_env, levels = sort(unique(sal_env)))) %>% 
+         sal_env = factor(sal_env, levels = sort(unique(sal_env))))
+p_prior_benefit_salience <- means_dat2 %>% 
   ggplot(., aes(x = sal_env, y = emmean, group = prior_benefit_2, col = prior_benefit_2)) +
   geom_line() +
   geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL, col = prior_benefit_2), width = .1, position = position_dodge(.1)) +
@@ -1766,11 +2105,11 @@ p_prior_benefit_sal_env <- means_dat %>%
   scale_fill_manual(legend_title, values=vals_legend, labels = labs_legend) + 
   guides(col = guide_legend(nrow = 2)) +
   labs(
-    title = "Perceived Prior Benefit and Left-Right",
+    title = "Interaction of Perceived Prior Benefit\nwith Salience of Climate and Environment",
     x = x_lab,
-    y = "Support"
-  ) + 
-  # ylim(.3, .7) +
+    y = "Support\n(Rate Outcome)"
+  ) +
+  ylim(2.5, 3.4) +
   theme_light() +
   theme(legend.position = "bottom",
         axis.text = element_text(size = 12),
@@ -1778,58 +2117,22 @@ p_prior_benefit_sal_env <- means_dat %>%
         strip.text = element_text(size = 12),
         legend.title = element_text(size=12), 
         legend.text = element_text(size=12),
-        axis.text.x = element_text(angle = 45, hjust = 1))
-p_prior_benefit_sal_env
-ggsave(p_prior_benefit_sal_env, filename = "Plots/p_prior_benefit_sal_env.pdf", height = 7, width = 10)
+        axis.text.x = element_text(angle = 0))
+p_prior_benefit_salience
+ggsave(p_prior_benefit_salience, filename = "Plots/p_prior_benefit_salience.pdf", height = 7, width = 10)
 
-
-# plot_model(model1.3, type = "pred", terms = c("sal_env", "ratio_ev_to_muni_area"), vcov.type = "HC1", robust = T) 
-x_lab <- "Issue Salience\nof Environment and Climate"
-labs_legend <- c("0", "2")
-vals_legend <- c("red4", "darkgreen")
-legend_title <- "EV Chargin Stations"
-x_ticks <- c("not salient", "among the top\n three issues")
-means_dat <- emmeans(model1.2, "sal_env", by = "ratio_ev_to_muni_area",  cov.keep = c("ratio_ev_to_muni_area", "sal_env"))
-p_ratio_ev_to_muni_area_sal_env <- means_dat %>% 
-  as.data.frame(.) %>% 
-  filter(ratio_ev_to_muni_area == 0 | (ratio_ev_to_muni_area > 1.95 & ratio_ev_to_muni_area < 2)) %>%
-  mutate(ratio_ev_to_muni_area = as.character(ratio_ev_to_muni_area),
-         sal_env = factor(sal_env, levels = sort(unique(sal_env)))) %>% 
-  ggplot(., aes(x = sal_env, y = emmean, group = ratio_ev_to_muni_area, col = ratio_ev_to_muni_area)) +
-  geom_line() +
-  geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL, col = ratio_ev_to_muni_area), width = .1, position = position_dodge(.1)) +
-  scale_x_discrete(labels = x_ticks) +
-  scale_color_manual(legend_title, values=vals_legend, labels = labs_legend) + 
-  scale_fill_manual(legend_title, values=vals_legend, labels = labs_legend) + 
-  guides(col = guide_legend(nrow = 2)) +
-  labs(
-    title = "EV Charging Stations and Salience: Environment and Climate",
-    x = x_lab,
-    y = "Support"
-  ) + 
-  # ylim(.3, .7) +
-  theme_light() +
-  theme(legend.position = "bottom",
-        axis.text = element_text(size = 12),
-        axis.title = element_text(size = 12),
-        strip.text = element_text(size = 12),
-        legend.title = element_text(size=12), 
-        legend.text = element_text(size=12),
-        axis.text.x = element_text(angle = 45, hjust = 1))
-p_ratio_ev_to_muni_area_sal_env
-ggsave(p_ratio_ev_to_muni_area_sal_env, filename = "Plots/p_ratio_ev_to_muni_area_sal_env.pdf", height = 7, width = 10)
 
 x_lab <- "Left-right\n(0 = left, 10 = right)"
-labs_legend <- c("0", "2")
+labs_legend <- c("no influence at all", "strong influence")
 vals_legend <- c("red4", "darkgreen")
-legend_title <- "EV Chargin Stations"
+legend_title <- "Perceived Prior Benefit"
 x_ticks <- seq(0,10,1)
-means_dat <- emmeans(model1.2, "left_right", by = "ratio_ev_to_muni_area",  cov.keep = c("ratio_ev_to_muni_area", "left_right"))
-p_ratio_ev_to_muni_area_left_right <- means_dat %>% 
+means_dat3 <- emmeans(model1.3, "left_right", by = "ratio_ev_to_muni_area",  cov.keep = c("ratio_ev_to_muni_area", "left_right")) %>% 
   as.data.frame(.) %>% 
-  filter(ratio_ev_to_muni_area == 0 | (ratio_ev_to_muni_area > 1.95 & ratio_ev_to_muni_area < 2)) %>%
+  filter(ratio_ev_to_muni_area == 0 | ratio_ev_to_muni_area >= 1.95 & ratio_ev_to_muni_area <= 2.04) %>% 
   mutate(ratio_ev_to_muni_area = as.character(ratio_ev_to_muni_area),
-         left_right = factor(left_right, levels = sort(unique(left_right)))) %>% 
+         left_right = factor(left_right, levels = sort(unique(left_right))))
+p_ev_stations_left_right <- means_dat3 %>% 
   ggplot(., aes(x = left_right, y = emmean, group = ratio_ev_to_muni_area, col = ratio_ev_to_muni_area)) +
   geom_line() +
   geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL, col = ratio_ev_to_muni_area), width = .1, position = position_dodge(.1)) +
@@ -1838,11 +2141,11 @@ p_ratio_ev_to_muni_area_left_right <- means_dat %>%
   scale_fill_manual(legend_title, values=vals_legend, labels = labs_legend) + 
   guides(col = guide_legend(nrow = 2)) +
   labs(
-    title = "Left-Right and EV Charging Stations",
+    title = "Interaction of EV Charging Stations\nwith Left-Right",
     x = x_lab,
-    y = "Support"
+    y = "Support\n(Rate Outcome)"
   ) + 
-  # ylim(.3, .7) +
+  ylim(1.8, 5) +
   theme_light() +
   theme(legend.position = "bottom",
         axis.text = element_text(size = 12),
@@ -1851,8 +2154,51 @@ p_ratio_ev_to_muni_area_left_right <- means_dat %>%
         legend.title = element_text(size=12), 
         legend.text = element_text(size=12),
         axis.text.x = element_text(angle = 0, hjust = 1))
-p_ratio_ev_to_muni_area_left_right
-ggsave(p_ratio_ev_to_muni_area_left_right, filename = "Plots/p_ratio_ev_to_muni_area_left_right.pdf", height = 7, width = 10)
+p_ev_stations_left_right
+ggsave(p_ev_stations_left_right, filename = "Plots/p_ev_stations_left_right.pdf", height = 7, width = 10)
+
+x_lab <- "Salience: Climate and Environment"
+labs_legend <- c("no influence at all", "strong influence")
+vals_legend <- c("red4", "darkgreen")
+legend_title <- "Perceived Prior Benefit"
+x_ticks <- c("not salient", "salient")
+means_dat4 <- emmeans(model1.4, "sal_env", by = "ratio_ev_to_muni_area",  cov.keep = c("ratio_ev_to_muni_area", "sal_env")) %>% 
+  as.data.frame(.) %>% 
+  filter(ratio_ev_to_muni_area == 0 | ratio_ev_to_muni_area >= 1.95 & ratio_ev_to_muni_area <= 2.04) %>% 
+  mutate(ratio_ev_to_muni_area = as.character(ratio_ev_to_muni_area),
+         sal_env = factor(sal_env, levels = sort(unique(sal_env))))
+p_ev_stations_sal_env <- means_dat4 %>% 
+  ggplot(., aes(x = sal_env, y = emmean, group = ratio_ev_to_muni_area, col = ratio_ev_to_muni_area)) +
+  geom_line() +
+  geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL, col = ratio_ev_to_muni_area), width = .1, position = position_dodge(.1)) +
+  scale_x_discrete(labels = x_ticks) +
+  scale_color_manual(legend_title, values=vals_legend, labels = labs_legend) + 
+  scale_fill_manual(legend_title, values=vals_legend, labels = labs_legend) + 
+  guides(col = guide_legend(nrow = 2)) +
+  labs(
+    title = "Interaction of EV Charging Stations\nwith Salience of Climate and Environment",
+    x = x_lab,
+    y = "Support (Rate Outcome)"
+  ) + 
+  ylim(2.5, 3.4) +
+  theme_light() +
+  theme(legend.position = "bottom",
+        axis.text = element_text(size = 12),
+        axis.title = element_text(size = 12),
+        strip.text = element_text(size = 12),
+        legend.title = element_text(size=12), 
+        legend.text = element_text(size=12),
+        axis.text.x = element_text(angle = 0))
+p_ev_stations_sal_env
+ggsave(p_ev_stations_sal_env, filename = "Plots/p_ev_stations_sal_env.pdf", height = 7, width = 10)
+
+cov_int_arranged_left_right <- ggarrange(p_prior_benefit_left_right, p_ev_stations_left_right)
+cov_int_arranged_left_right
+ggsave(cov_int_arranged_left_right, filename = "Plots/cov_int_arranged_left_right.pdf")
+
+cov_int_arranged_salience <- ggarrange(p_prior_benefit_salience, p_ev_stations_sal_env)
+cov_int_arranged_salience
+ggsave(cov_int_arranged_salience, filename = "Plots/cov_int_arranged_salience.pdf")
 
 ######################################################
 # linear regression analysis
@@ -1905,7 +2251,7 @@ texreg::texreg(list(model1.1_r, model1.2_r, model1.3_r, model1.4_r, model1.5_r),
                                      "10 Fr. for short- and 30 Fr. for long-distance", "25 Fr. for short- and 75 Fr. for long-distance", "40 Fr. for short- and 120 Fr. for long-distance", "55 Fr. for short- and 165 Fr. for long-distance",
                                      "Mostly reimbursement", "Reimbursement und climate protection", "Mostly climate protection", "Exclusively climate protection",
                                      # EVs
-                                     "Percieved Prior Benefit", "EV Charging Stations", 
+                                     "Perceived Prior Benefit", "EV Charging Stations", 
                                      # CTRLs
                                      "Driver", "Home Owner", "Age", "Education", "French", "Primary Employment Sector", "Secondary Employment Sector", "Tertiary Employment Sector", "Financial Condition", "Left-Right",
                                      "Salience: Globalisation", "Salience: Environment and Climate",
@@ -1946,7 +2292,7 @@ texreg::texreg(list(model1.1_r, model1.2_r), digits = 3, stars = c(0.001, 0.01, 
                omit.coef = "region",
                custom.coef.names = c("Intercept",
                                      # Experimental
-                                     "50$\\%$", "60$\\%$", "70$\\%$", "80$\\%$", "Percieved Prior Benefit",
+                                     "50$\\%$", "60$\\%$", "70$\\%$", "80$\\%$", "Perceived Prior Benefit",
                                      "0.14 Fr./l petrol", "0.28 Fr./l petrol", "0.42 Fr./l petrol", "0.56 Fr./l petrol",
                                      "0.16 Fr./l heating oil", "0.31 Fr./l heating oil", "0.47 Fr./l heating oil", "0.63 Fr./l heating oil",
                                      "0.77 Fr./kg meat", "1.53 Fr./kg meat", "2.30 Fr./kg meat", "3.07 Fr./kg meat",
@@ -1962,12 +2308,12 @@ texreg::texreg(list(model1.1_r, model1.2_r), digits = 3, stars = c(0.001, 0.01, 
                                      # "Belief: Effectiveness", "Belief: Efficiency", "Belief: Competitiveness", "Belief: Justice", "Belief: Transformation"
                                      
                                      # 1
-                                     "50\\% $\\times$ Prior Benefit", "60\\% $\\times$ Prior Benefit", "70\\% $\\times$ Prior Benefit", "80\\% $\\times$ Prior Benefit",
-                                     "0.14 Fr./l petrol $\\times$ Prior Benefit", "0.28 Fr./l petrol $\\times$ Prior Benefit", "0.42 Fr./l petrol $\\times$ Prior Benefit", "0.56 Fr./l petrol $\\times$ Prior Benefit",
-                                     "0.16 Fr./l heating oil $\\times$ Prior Benefit", "0.31 Fr./l heating oil $\\times$ Prior Benefit", "0.47 Fr./l heating oil $\\times$ Prior Benefit", "0.63 Fr./l heating oil $\\times$ Prior Benefit",
-                                     "0.77 Fr./kg meat $\\times$ Prior Benefit", "1.53 Fr./kg meat $\\times$ Prior Benefit", "2.30 Fr./kg meat $\\times$ Prior Benefit", "3.07 Fr./kg meat $\\times$ Prior Benefit",
-                                     "10 Fr. for short- and 30 Fr. for long-distance $\\times$ Prior Benefit", "25 Fr. for short- and 75 Fr. for long-distance $\\times$ Prior Benefit", "40 Fr. for short- and 120 Fr. for long-distance$\\times$ Prior Benefit", "55 Fr. for short- and 165 Fr. for long-distance$\\times$ Prior Benefit",
-                                     "Mostly reimbursement $\\times$ Prior Benefit", "Reimbursement and climate protection $\\times$ Prior Benefit", "Mostly climate protection $\\times$ Prior Benefit", "Exclusively climate protection $\\times$ Prior Benefit",
+                                     "50\\%$\\times$ Perceived Prior Benefit", "60\\%$\\times$ Perceived Prior Benefit", "70\\%$\\times$ Perceived Prior Benefit", "80\\%$\\times$ Perceived Prior Benefit",
+                                     "0.14 Fr./l petrol$\\times$ Perceived Prior Benefit", "0.28 Fr./l petrol$\\times$ Perceived Prior Benefit", "0.42 Fr./l petrol$\\times$ Perceived Prior Benefit", "0.56 Fr./l petrol$\\times$ Perceived Prior Benefit",
+                                     "0.16 Fr./l heating oil$\\times$ Perceived Prior Benefit", "0.31 Fr./l heating oil$\\times$ Perceived Prior Benefit", "0.47 Fr./l heating oil$\\times$ Perceived Prior Benefit", "0.63 Fr./l heating oil$\\times$ Perceived Prior Benefit",
+                                     "0.77 Fr./kg meat$\\times$ Perceived Prior Benefit", "1.53 Fr./kg meat$\\times$ Perceived Prior Benefit", "2.30 Fr./kg meat$\\times$ Perceived Prior Benefit", "3.07 Fr./kg meat$\\times$ Perceived Prior Benefit",
+                                     "10 Fr. for short- and 30 Fr. for long-distance$\\times$ Perceived Prior Benefit", "25 Fr. for short- and 75 Fr. for long-distance$\\times$ Perceived Prior Benefit", "40 Fr. for short- and 120 Fr. for long-distance$\\times$ Prior Benefit", "55 Fr. for short- and 165 Fr. for long-distance$\\times$ Prior Benefit",
+                                     "Mostly reimbursement$\\times$ Perceived Prior Benefit", "Reimbursement and climate protection$\\times$ Perceived Prior Benefit", "Mostly climate protection$\\times$ Perceived Prior Benefit", "Exclusively climate protection$\\times$ Perceived Prior Benefit",
                                      
                                      "EV Charging Stations", 
                                      # 2
@@ -2013,7 +2359,7 @@ texreg::texreg(list(model1.1_r, model1.2_r), digits = 3, stars = c(0.001, 0.01, 
                omit.coef = "region",
                custom.coef.names = c("Intercept",
                                      # Experimental
-                                     "50$\\%$", "60$\\%$", "70$\\%$", "80$\\%$", "Percieved Prior Benefit",
+                                     "50$\\%$", "60$\\%$", "70$\\%$", "80$\\%$", "Perceived Prior Benefit",
                                      "0.14 Fr./l petrol", "0.28 Fr./l petrol", "0.42 Fr./l petrol", "0.56 Fr./l petrol",
                                      "0.16 Fr./l heating oil", "0.31 Fr./l heating oil", "0.47 Fr./l heating oil", "0.63 Fr./l heating oil",
                                      "0.77 Fr./kg meat", "1.53 Fr./kg meat", "2.30 Fr./kg meat", "3.07 Fr./kg meat",
@@ -2029,12 +2375,12 @@ texreg::texreg(list(model1.1_r, model1.2_r), digits = 3, stars = c(0.001, 0.01, 
                                      # "Belief: Effectiveness", "Belief: Efficiency", "Belief: Competitiveness", "Belief: Justice", "Belief: Transformation"
                                      
                                      # 1
-                                     "50\\% $\\times$ Prior Benefit", "60\\% $\\times$ Prior Benefit", "70\\% $\\times$ Prior Benefit", "80\\% $\\times$ Prior Benefit",
-                                     "0.14 Fr./l petrol $\\times$ Prior Benefit", "0.28 Fr./l petrol $\\times$ Prior Benefit", "0.42 Fr./l petrol $\\times$ Prior Benefit", "0.56 Fr./l petrol $\\times$ Prior Benefit",
-                                     "0.16 Fr./l heating oil $\\times$ Prior Benefit", "0.31 Fr./l heating oil $\\times$ Prior Benefit", "0.47 Fr./l heating oil $\\times$ Prior Benefit", "0.63 Fr./l heating oil $\\times$ Prior Benefit",
-                                     "0.77 Fr./kg meat $\\times$ Prior Benefit", "1.53 Fr./kg meat $\\times$ Prior Benefit", "2.30 Fr./kg meat $\\times$ Prior Benefit", "3.07 Fr./kg meat $\\times$ Prior Benefit",
-                                     "10 Fr. for short- and 30 Fr. for long-distance $\\times$ Prior Benefit", "25 Fr. for short- and 75 Fr. for long-distance $\\times$ Prior Benefit", "40 Fr. for short- and 120 Fr. for long-distance$\\times$ Prior Benefit", "55 Fr. for short- and 165 Fr. for long-distance$\\times$ Prior Benefit",
-                                     "Mostly reimbursement $\\times$ Prior Benefit", "Reimbursement and climate protection $\\times$ Prior Benefit", "Mostly climate protection $\\times$ Prior Benefit", "Exclusively climate protection $\\times$ Prior Benefit",
+                                     "50\\%$\\times$ Perceived Prior Benefit", "60\\%$\\times$ Perceived Prior Benefit", "70\\%$\\times$ Perceived Prior Benefit", "80\\%$\\times$ Perceived Prior Benefit",
+                                     "0.14 Fr./l petrol$\\times$ Perceived Prior Benefit", "0.28 Fr./l petrol$\\times$ Perceived Prior Benefit", "0.42 Fr./l petrol$\\times$ Perceived Prior Benefit", "0.56 Fr./l petrol$\\times$ Perceived Prior Benefit",
+                                     "0.16 Fr./l heating oil$\\times$ Perceived Prior Benefit", "0.31 Fr./l heating oil$\\times$ Perceived Prior Benefit", "0.47 Fr./l heating oil$\\times$ Perceived Prior Benefit", "0.63 Fr./l heating oil$\\times$ Perceived Prior Benefit",
+                                     "0.77 Fr./kg meat$\\times$ Perceived Prior Benefit", "1.53 Fr./kg meat$\\times$ Perceived Prior Benefit", "2.30 Fr./kg meat$\\times$ Perceived Prior Benefit", "3.07 Fr./kg meat$\\times$ Perceived Prior Benefit",
+                                     "10 Fr. for short- and 30 Fr. for long-distance$\\times$ Perceived Prior Benefit", "25 Fr. for short- and 75 Fr. for long-distance$\\times$ Perceived Prior Benefit", "40 Fr. for short- and 120 Fr. for long-distance$\\times$ Prior Benefit", "55 Fr. for short- and 165 Fr. for long-distance$\\times$ Prior Benefit",
+                                     "Mostly reimbursement$\\times$ Perceived Prior Benefit", "Reimbursement and climate protection$\\times$ Perceived Prior Benefit", "Mostly climate protection$\\times$ Perceived Prior Benefit", "Exclusively climate protection$\\times$ Perceived Prior Benefit",
                                      
                                      "EV Charging Stations", 
                                      # 2
@@ -2104,7 +2450,7 @@ texreg::texreg(list(model1.1_r, model1.2_r, model1.3_r, model1.4_r, model1.5_r),
                omit.coef = "region",
                custom.coef.names = c("Intercept", "Reduction Target", "Tax Road Transport", "Tax Housing", "Tax Food", "Tax Aviation Transport", "Revenue Use",
                                      # EVs
-                                     "Percieved Prior Benefit", "EV Charging Stations",
+                                     "Perceived Prior Benefit", "EV Charging Stations",
                                      # CTRLs
                                      "Driver", "Home Owner", "Age", "Education", "French", "Primary Employment Sector", "Secondary Employment Sector", "Tertiary Employment Sector", "Financial Condition", "Left-Right",
                                      "Salience: Globalisation", "Salience: Environment and Climate",
@@ -2142,7 +2488,7 @@ texreg::texreg(list(model1.1_r, model1.2_r), digits = 3, stars = c(0.001, 0.01, 
                fontsize = "tiny", longtable = T, no.margin = T,
                reorder.coef = c(1:2, 4:8, 3, 29, 9:19, 20:28, 30:35),
                omit.coef = "region",
-               custom.coef.names = c("Intercept", "Percieved Prior Benefit", "Reduction Target", "Tax Road Transport", "Tax Housing", "Tax Food", "Tax Aviation Transport", "Revenue Use",
+               custom.coef.names = c("Intercept", "Perceived Prior Benefit", "Reduction Target", "Tax Road Transport", "Tax Housing", "Tax Food", "Tax Aviation Transport", "Revenue Use",
                                      # CTRLs
                                      "Driver", "Home Owner", "Age", "Education", "French", "Primary Employment Sector", "Secondary Employment Sector", "Tertiary Employment Sector", "Financial Condition", "Left-Right",
                                      "Salience: Globalisation", "Salience: Environment and Climate",
@@ -2151,7 +2497,7 @@ texreg::texreg(list(model1.1_r, model1.2_r), digits = 3, stars = c(0.001, 0.01, 
                                      # "Belief: Effectiveness", "Belief: Efficiency", "Belief: Competitiveness", "Belief: Justice", "Belief: Transformation"
                                      
                                      # Interactions
-                                     "Reduction Target $\\times$ Prior Benefit", "Road Transport $\\times$ Prior Benefit", "Housing $\\times$ Prior Benefit", "Food $\\times$ Prior Benefit", "Aviation Transport $\\times$ Prior Benefit", "Revenue Use $\\times$ Prior Benefit",
+                                     "Reduction Target$\\times$ Perceived Prior Benefit", "Road Transport$\\times$ Perceived Prior Benefit", "Housing$\\times$ Perceived Prior Benefit", "Food$\\times$ Perceived Prior Benefit", "Aviation Transport$\\times$ Perceived Prior Benefit", "Revenue Use$\\times$ Perceived Prior Benefit",
                                      "EV Charging Stations", "Reduction Target $\\times$ EV Charging Stations", "Road Transport $\\times$ EV Charging Stations", "Housing $\\times$ EV Charging Stations", "Food $\\times$ EV Charging Stations", "Aviation Transport $\\times$ EV Charging Stations", "Revenue Use $\\times$ EV Charging Stations"
                ),
                groups = list("Experimental" = 2:7, "Explanatory Variables" = 8:9, "Controls" = 10:23,
@@ -2184,7 +2530,7 @@ texreg::texreg(list(model1.1_r, model1.2_r), digits = 3, stars = c(0.001, 0.01, 
                fontsize = "tiny", longtable = T, no.margin = T,
                reorder.coef = c(1:2, 4:8, 3, 29, 9:19, 20:28, 30:35),
                omit.coef = "region",
-               custom.coef.names = c("Intercept", "Percieved Prior Benefit", "Reduction Target", "Tax Road Transport", "Tax Housing", "Tax Food", "Tax Aviation Transport", "Revenue Use",
+               custom.coef.names = c("Intercept", "Perceived Prior Benefit", "Reduction Target", "Tax Road Transport", "Tax Housing", "Tax Food", "Tax Aviation Transport", "Revenue Use",
                                      # CTRLs
                                      "Driver", "Home Owner", "Age", "Education", "French", "Primary Employment Sector", "Secondary Employment Sector", "Tertiary Employment Sector", "Financial Condition", "Left-Right",
                                      "Salience: Globalisation", "Salience: Environment and Climate",
@@ -2193,7 +2539,7 @@ texreg::texreg(list(model1.1_r, model1.2_r), digits = 3, stars = c(0.001, 0.01, 
                                      # "Belief: Effectiveness", "Belief: Efficiency", "Belief: Competitiveness", "Belief: Justice", "Belief: Transformation"
                                      
                                      # Interactions
-                                     "Reduction Target $\\times$ Prior Benefit", "Road Transport $\\times$ Prior Benefit", "Housing $\\times$ Prior Benefit", "Food $\\times$ Prior Benefit", "Aviation Transport $\\times$ Prior Benefit", "Revenue Use $\\times$ Prior Benefit",
+                                     "Reduction Target$\\times$ Perceived Prior Benefit", "Road Transport$\\times$ Perceived Prior Benefit", "Housing$\\times$ Perceived Prior Benefit", "Food$\\times$ Perceived Prior Benefit", "Aviation Transport$\\times$ Perceived Prior Benefit", "Revenue Use$\\times$ Perceived Prior Benefit",
                                      "EV Charging Stations", "Reduction Target $\\times$ EV Charging Stations", "Road Transport $\\times$ EV Charging Stations", "Housing $\\times$ EV Charging Stations", "Food $\\times$ EV Charging Stations", "Aviation Transport $\\times$ EV Charging Stations", "Revenue Use $\\times$ EV Charging Stations"
                ),
                groups = list("Experimental" = 2:7, "Explanatory Variables" = 8:9, "Controls" = 10:23,
@@ -2231,7 +2577,7 @@ texreg::texreg(list(model1.1, model1.2), digits = 3, stars = c(0.001, 0.01, 0.05
                                      "Salience: Globalisation", "Salience: Environment and Climate",
                                      "Intermediate Area", "Rural Area",
                                      # Interactions
-                                     "Percieved Prior Benefit $\\times$ Left-Right", "Percieved Prior Benefit $\\times$ Salience: Environment and Climate",
+                                     "Perceived Prior Benefit $\\times$ Left-Right", "Perceived Prior Benefit $\\times$ Salience: Environment and Climate",
                                      "EV Charging Stations",
                                      "EV Charging Stations $\\times$ Left-Right", "EV Charging Stations $\\times$ Salience: Environment and Climate"
                ),
@@ -2271,7 +2617,7 @@ texreg::texreg(list(model1.1, model1.3, model1.4, model1.5), digits = 3, stars =
                fontsize = "tiny", longtable = T, no.margin = T,
                # reorder.coef = c(1:2, 4:8, 3, 29, 36, 9:19, 20:28, 30:35, 37:42),
                omit.coef = "region",
-               # custom.coef.names = c("Intercept", "Percieved Prior Benefit", "Reduction Target", "Tax Road Transport", "Tax Housing", "Tax Food", "Tax Aviation Transport", "Revenue Use",
+               # custom.coef.names = c("Intercept", "Perceived Prior Benefit", "Reduction Target", "Tax Road Transport", "Tax Housing", "Tax Food", "Tax Aviation Transport", "Revenue Use",
                #                       
                #                       # CTRLs
                #                       "Driver", "Home Owner", "Age", "Education", "French", "Primary Employment Sector", "Secondary Employment Sector", "Tertiary Employment Sector", "Financial Condition", "Left-Right",
@@ -2281,7 +2627,7 @@ texreg::texreg(list(model1.1, model1.3, model1.4, model1.5), digits = 3, stars =
                #                       # "Belief: Effectiveness", "Belief: Efficiency", "Belief: Competitiveness", "Belief: Justice", "Belief: Transformation"
                #                       
                #                       # Interactions
-               #                       "Reduction Target $\\times$ Prior Benefit", "Road Transport $\\times$ Prior Benefit", "Housing $\\times$ Prior Benefit", "Food $\\times$ Prior Benefit", "Aviation Transport $\\times$ Prior Benefit", "Revenue Use $\\times$ Prior Benefit",
+               #                       "Reduction Target$\\times$ Perceived Prior Benefit", "Road Transport$\\times$ Perceived Prior Benefit", "Housing$\\times$ Perceived Prior Benefit", "Food$\\times$ Perceived Prior Benefit", "Aviation Transport$\\times$ Perceived Prior Benefit", "Revenue Use$\\times$ Perceived Prior Benefit",
                #                       "EV Charging Stations", "Reduction Target $\\times$ EV Charging Stations", "Road Transport $\\times$ EV Charging Stations", "Housing $\\times$ EV Charging Stations", "Food $\\times$ EV Charging Stations", "Aviation Transport $\\times$ EV Charging Stations", "Revenue Use $\\times$ EV Charging Stations",
                #                       "Switch", "Reduction Target $\\times$ Switch", "Road Transport $\\times$ Switch", "Housing $\\times$ Switch", "Food $\\times$ Switch", "Aviation Transport $\\times$ Switch", "Revenue Use $\\times$ Switch"
                # ),
@@ -2438,7 +2784,7 @@ sparsereg_res_clean <- sparsereg_res %>%
                 var_group = factor(var_group, levels = c("Explanatory\n Variables", "Behavioural\n Controls", "Demographic\n Controls", "Salience\n Controls", "Geographic\n Controls", "Belief\n Controls", "Preference\n Controls")),
                 
                 covar = as.factor(NA),
-                covar = ifelse(grepl("prior_benefit_2 ",variables),"Percieved Prior Benefit",covar),
+                covar = ifelse(grepl("prior_benefit_2 ",variables),"Perceived Prior Benefit",covar),
                 covar = ifelse(grepl("driver ",variables) & !grepl("ren_driver ",variables),"Driver",covar),
                 covar = ifelse(grepl("ren_driver ",variables),"Renewable Driver",covar),
                 covar = ifelse(grepl("renew_heating ",variables),"Renewable Heater",covar),
@@ -2458,7 +2804,7 @@ sparsereg_res_clean <- sparsereg_res %>%
                 covar = ifelse(grepl("intermediary ",variables),"Intermediary",covar),
                 covar = ifelse(grepl("rural ",variables),"Rural",covar),
                 
-                covar = factor(covar, levels = c("Percieved Prior Benefit", 
+                covar = factor(covar, levels = c("Perceived Prior Benefit", 
                                                  "EV Charging Stations", "PT Stations", "Switch",
                                                  # CTRLs
                                                  "Driver", "Home Owner", "Vegetarian", "Age", "Education", "French", "Primary Employment Sector", "Secondary Employment Sector", "Tertiary Employment Sector", "Financial Condition", "Left-Right",
@@ -2472,7 +2818,7 @@ sparsereg_res_clean <- sparsereg_res %>%
   dplyr::filter(!is.na(attribute) & !is.na(covar) & !is.na(var_group)) %>% 
   dplyr::mutate(significant = ifelse((Mean-1.96*SD > 0 & Mean+1.96*SD > 0) | (Mean-1.96*SD < 0 & Mean+1.96*SD < 0), 1 ,0)) 
 
-p_sparse_reg_heat_out_1.4 <- sparsereg_res_clean %>% 
+p_sparse_reg_heat_out <- sparsereg_res_clean %>% 
   ggplot2::ggplot(., ggplot2::aes_string(x = "covar",
                                          y = "cjoin_level",
                                          fill = "Mean")) +
@@ -2490,8 +2836,8 @@ p_sparse_reg_heat_out_1.4 <- sparsereg_res_clean %>%
   ggplot2::theme_classic() +
   ggplot2::theme(axis.text.x = ggplot2::element_text(angle= 45, vjust = 1, hjust = 1), 
                  strip.placement = "outside", legend.position = "bottom", text = element_text(size=14, colour = "black"),)
-p_sparse_reg_heat_out_1.4
-ggsave(p_sparse_reg_heat_out_1.4, file = "Plots/sparse_reg_heat_out_1_4_new_controls.pdf", height = 15, width = 11)
+p_sparse_reg_heat_out
+ggsave(p_sparse_reg_heat_out, file = "Plots/sparse_reg_heat.pdf", height = 15, width = 11)
 
 ######################################################
 # CJBART
