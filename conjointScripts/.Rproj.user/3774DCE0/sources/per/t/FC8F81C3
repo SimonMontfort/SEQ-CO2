@@ -1,0 +1,26 @@
+{
+    "id": "FC8F81C3",
+    "path": "~/Documents/repo/SEQ-CO2/conjointScripts/SEQ-CO2-analysis.R",
+    "project_path": "SEQ-CO2-analysis.R",
+    "type": "r_source",
+    "hash": "246760168",
+    "contents": "",
+    "dirty": false,
+    "created": 1698328666130.0,
+    "source_on_save": false,
+    "relative_order": 1,
+    "properties": {
+        "source_window_id": "",
+        "Source": "Source",
+        "cursorPosition": "2470,27",
+        "scrollLine": "2468"
+    },
+    "folds": "",
+    "lastKnownWriteTime": 1698447913,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1698447913831,
+    "read_only": false,
+    "read_only_alternatives": []
+}
